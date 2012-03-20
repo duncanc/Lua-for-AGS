@@ -1,0 +1,10067 @@
+
+#include <windows.h>
+
+extern "C" {
+	#include <lua.h>
+	#include <lauxlib.h>
+	#include <llh.h>
+	#include <string.h>
+}
+
+#include "agslua_autogen.h"
+#include "agsplugin.h"
+
+extern void aux_formatstring(lua_State *L, int i);
+
+static void luags_pushscriptfloat(lua_State *L, SCRIPT_FLOAT(f)) {
+	INIT_SCRIPT_FLOAT(f);
+	lua_pushnumber(L, f);
+}
+
+static FLOAT_RETURN_TYPE luags_checkscriptfloat(lua_State *L, int idx) {
+	float f = (float)luaL_checknumber(L, idx);
+	RETURN_FLOAT(f);
+}
+
+static void* ImmortalLuaMethod(void* obj, const char* name, void* params, int protectedMode) {
+	int numParams = aux_LuaCall_SetUp(obj, name, params);
+	if (numParams == -1) {
+		return NULL; // LUACALL_FUNCNOTFOUND;
+	}
+	return aux_LuaCall_ReturnList(numParams, protectedMode);
+}
+
+int AGS_Ephemeral__gc(lua_State *L) {
+	if (!ags_closing) {
+		engine->DecrementManagedObjectRefCount((const char*)*(void**)lua_touserdata(L,1));
+	}
+	return 0;
+}
+
+void luags_pushEphemeral(lua_State *L, void* eph, int META_IDX, int STORE_IDX) {
+	if (eph == NULL) {
+		lua_pushnil(L);
+	}
+	else {
+		llh_pushunboxedptr(L, eph);
+		lua_rawget(L, STORE_IDX);
+		if (lua_isnil(L,-1)) {
+			lua_pop(L,1);
+
+			engine->IncrementManagedObjectRefCount((const char*)eph);
+
+			EphemeralContainer* container = (EphemeralContainer*)lua_newuserdata(L, sizeof(EphemeralContainer));
+			container->ptr = (const char*)eph;
+			container->key = engine->GetManagedObjectKeyByAddress((const char*)eph);
+
+			lua_pushvalue(L, META_IDX);
+			lua_setmetatable(L, -2);
+
+			lua_pushlightuserdata(L, eph);
+			lua_pushvalue(L, -2);
+			lua_rawset(L, STORE_IDX);
+		}
+	}
+}
+
+
+
+// Error messages
+static const char* ATTEMPT_TO_SET_READONLY_ATTRIBUTE = "attempt to set read-only attribute";
+
+
+// Global function instances
+_AGS_DISPLAY AGS_Display;
+_AGS_DISPLAYAT AGS_DisplayAt;
+_AGS_DISPLAYATY AGS_DisplayAtY;
+_AGS_DISPLAYMESSAGE AGS_DisplayMessage;
+_AGS_DISPLAYMESSAGEATY AGS_DisplayMessageAtY;
+_AGS_DISPLAYTOPBAR AGS_DisplayTopBar;
+_AGS_DISPLAYMESSAGEBAR AGS_DisplayMessageBar;
+_AGS_RESETROOM AGS_ResetRoom;
+_AGS_HASPLAYERBEENINROOM AGS_HasPlayerBeenInRoom;
+_AGS_PROCESSCLICK AGS_ProcessClick;
+_AGS_ABORTGAME AGS_AbortGame;
+_AGS_QUITGAME AGS_QuitGame;
+_AGS_SETGAMESPEED AGS_SetGameSpeed;
+_AGS_GETGAMESPEED AGS_GetGameSpeed;
+_AGS_SETGAMEOPTION AGS_SetGameOption;
+_AGS_GETGAMEOPTION AGS_GetGameOption;
+_AGS_DEBUG AGS_Debug;
+_AGS_CALLROOMSCRIPT AGS_CallRoomScript;
+_AGS_RUNAGSGAME AGS_RunAGSGame;
+_AGS_GETTRANSLATION AGS_GetTranslation;
+_AGS_ISTRANSLATIONAVAILABLE AGS_IsTranslationAvailable;
+_AGS_RESTOREGAMEDIALOG AGS_RestoreGameDialog;
+_AGS_SAVEGAMEDIALOG AGS_SaveGameDialog;
+_AGS_RESTARTGAME AGS_RestartGame;
+_AGS_SAVEGAMESLOT AGS_SaveGameSlot;
+_AGS_RESTOREGAMESLOT AGS_RestoreGameSlot;
+_AGS_DELETESAVESLOT AGS_DeleteSaveSlot;
+_AGS_SETRESTARTPOINT AGS_SetRestartPoint;
+_AGS_GETLOCATIONTYPE AGS_GetLocationType;
+_AGS_GETWALKABLEAREAAT AGS_GetWalkableAreaAt;
+_AGS_GETSCALINGAT AGS_GetScalingAt;
+_AGS_GETROOMPROPERTY AGS_GetRoomProperty;
+_AGS_SETVIEWPORT AGS_SetViewport;
+_AGS_RELEASEVIEWPORT AGS_ReleaseViewport;
+_AGS_GETVIEWPORTX AGS_GetViewportX;
+_AGS_GETVIEWPORTY AGS_GetViewportY;
+_AGS_ISGAMEPAUSED AGS_IsGamePaused;
+_AGS_GETGRAPHICALVARIABLE AGS_GetGraphicalVariable;
+_AGS_SETGRAPHICALVARIABLE AGS_SetGraphicalVariable;
+_AGS_DISABLEINTERFACE AGS_DisableInterface;
+_AGS_ENABLEINTERFACE AGS_EnableInterface;
+_AGS_ISINTERFACEENABLED AGS_IsInterfaceEnabled;
+_AGS_SAID AGS_Said;
+_AGS_GETTEXTWIDTH AGS_GetTextWidth;
+_AGS_GETTEXTHEIGHT AGS_GetTextHeight;
+_AGS_GIVESCORE AGS_GiveScore;
+_AGS_UPDATEINVENTORY AGS_UpdateInventory;
+_AGS_STOPDIALOG AGS_StopDialog;
+_AGS_ARETHINGSOVERLAPPING AGS_AreThingsOverlapping;
+_AGS_SETVOICEMODE AGS_SetVoiceMode;
+_AGS_SETSKIPSPEECH AGS_SetSkipSpeech;
+_AGS_SETSPEECHSTYLE AGS_SetSpeechStyle;
+_AGS_SETTIMER AGS_SetTimer;
+_AGS_ISTIMEREXPIRED AGS_IsTimerExpired;
+_AGS_SETMULTITASKINGMODE AGS_SetMultitaskingMode;
+_AGS_FLOATTOINT AGS_FloatToInt;
+_AGS_INTTOFLOAT AGS_IntToFloat;
+_AGS_FADEIN AGS_FadeIn;
+_AGS_FADEOUT AGS_FadeOut;
+_AGS_CYCLEPALETTE AGS_CyclePalette;
+_AGS_SETPALRGB AGS_SetPalRGB;
+_AGS_UPDATEPALETTE AGS_UpdatePalette;
+_AGS_TINTSCREEN AGS_TintScreen;
+_AGS_SETAMBIENTTINT AGS_SetAmbientTint;
+_AGS_RANDOM AGS_Random;
+_AGS_SETBACKGROUNDFRAME AGS_SetBackgroundFrame;
+_AGS_GETBACKGROUNDFRAME AGS_GetBackgroundFrame;
+_AGS_SHAKESCREEN AGS_ShakeScreen;
+_AGS_SHAKESCREENBACKGROUND AGS_ShakeScreenBackground;
+_AGS_SETSCREENTRANSITION AGS_SetScreenTransition;
+_AGS_SETNEXTSCREENTRANSITION AGS_SetNextScreenTransition;
+_AGS_SETFADECOLOR AGS_SetFadeColor;
+_AGS_ISINTERACTIONAVAILABLE AGS_IsInteractionAvailable;
+_AGS_REMOVEWALKABLEAREA AGS_RemoveWalkableArea;
+_AGS_RESTOREWALKABLEAREA AGS_RestoreWalkableArea;
+_AGS_SETAREASCALING AGS_SetAreaScaling;
+_AGS_DISABLEGROUNDLEVELAREAS AGS_DisableGroundLevelAreas;
+_AGS_ENABLEGROUNDLEVELAREAS AGS_EnableGroundLevelAreas;
+_AGS_SETWALKBEHINDBASE AGS_SetWalkBehindBase;
+_AGS_CDAUDIO AGS_CDAudio;
+_AGS_PLAYFLIC AGS_PlayFlic;
+_AGS_PLAYVIDEO AGS_PlayVideo;
+_AGS_PLAYMUSIC AGS_PlayMusic;
+_AGS_PLAYMUSICQUEUED AGS_PlayMusicQueued;
+_AGS_PLAYSILENTMIDI AGS_PlaySilentMIDI;
+_AGS_PLAYMP3FILE AGS_PlayMP3File;
+_AGS_PLAYSOUND AGS_PlaySound;
+_AGS_PLAYSOUNDEX AGS_PlaySoundEx;
+_AGS_PLAYAMBIENTSOUND AGS_PlayAmbientSound;
+_AGS_STOPAMBIENTSOUND AGS_StopAmbientSound;
+_AGS_GETCURRENTMUSIC AGS_GetCurrentMusic;
+_AGS_SETMUSICREPEAT AGS_SetMusicRepeat;
+_AGS_SETMUSICVOLUME AGS_SetMusicVolume;
+_AGS_SETSOUNDVOLUME AGS_SetSoundVolume;
+_AGS_SETMUSICMASTERVOLUME AGS_SetMusicMasterVolume;
+_AGS_SETDIGITALMASTERVOLUME AGS_SetDigitalMasterVolume;
+_AGS_SEEKMODPATTERN AGS_SeekMODPattern;
+_AGS_ISCHANNELPLAYING AGS_IsChannelPlaying;
+_AGS_ISSOUNDPLAYING AGS_IsSoundPlaying;
+_AGS_ISMUSICPLAYING AGS_IsMusicPlaying;
+_AGS_GETMIDIPOSITION AGS_GetMIDIPosition;
+_AGS_SEEKMIDIPOSITION AGS_SeekMIDIPosition;
+_AGS_GETMP3POSMILLIS AGS_GetMP3PosMillis;
+_AGS_SEEKMP3POSMILLIS AGS_SeekMP3PosMillis;
+_AGS_SETCHANNELVOLUME AGS_SetChannelVolume;
+_AGS_STOPCHANNEL AGS_StopChannel;
+_AGS_STOPMUSIC AGS_StopMusic;
+_AGS_ISVOXAVAILABLE AGS_IsVoxAvailable;
+_AGS_SETSPEECHVOLUME AGS_SetSpeechVolume;
+_AGS_ISMUSICVOXAVAILABLE AGS_IsMusicVoxAvailable;
+_AGS_SAVESCREENSHOT AGS_SaveScreenShot;
+_AGS_PAUSEGAME AGS_PauseGame;
+_AGS_UNPAUSEGAME AGS_UnPauseGame;
+_AGS_WAIT AGS_Wait;
+_AGS_WAITKEY AGS_WaitKey;
+_AGS_WAITMOUSEKEY AGS_WaitMouseKey;
+_AGS_ISKEYPRESSED AGS_IsKeyPressed;
+_AGS_SETGLOBALINT AGS_SetGlobalInt;
+_AGS_GETGLOBALINT AGS_GetGlobalInt;
+_AGS_FLIPSCREEN AGS_FlipScreen;
+_AGS_SKIPUNTILCHARACTERSTOPS AGS_SkipUntilCharacterStops;
+_AGS_STARTCUTSCENE AGS_StartCutscene;
+_AGS_ENDCUTSCENE AGS_EndCutscene;
+_AGS_CLAIMEVENT AGS_ClaimEvent;
+_AGS_SETTEXTWINDOWGUI AGS_SetTextWindowGUI;
+_AGS_FINDGUIID AGS_FindGUIID;
+
+// ViewFrame method instances
+_AGS_VIEWFRAME_GET_FLIPPED AGS_ViewFrame_get_Flipped;
+_AGS_VIEWFRAME_GET_FRAME AGS_ViewFrame_get_Frame;
+_AGS_VIEWFRAME_GET_GRAPHIC AGS_ViewFrame_get_Graphic;
+_AGS_VIEWFRAME_SET_GRAPHIC AGS_ViewFrame_set_Graphic;
+_AGS_VIEWFRAME_GET_LINKEDAUDIO AGS_ViewFrame_get_LinkedAudio;
+_AGS_VIEWFRAME_SET_LINKEDAUDIO AGS_ViewFrame_set_LinkedAudio;
+_AGS_VIEWFRAME_GET_LOOP AGS_ViewFrame_get_Loop;
+_AGS_VIEWFRAME_GET_SOUND AGS_ViewFrame_get_Sound;
+_AGS_VIEWFRAME_SET_SOUND AGS_ViewFrame_set_Sound;
+_AGS_VIEWFRAME_GET_SPEED AGS_ViewFrame_get_Speed;
+_AGS_VIEWFRAME_GET_VIEW AGS_ViewFrame_get_View;
+
+// DrawingSurface method instances
+_AGS_DRAWINGSURFACE_CLEAR AGS_DrawingSurface_Clear;
+_AGS_DRAWINGSURFACE_CREATECOPY AGS_DrawingSurface_CreateCopy;
+_AGS_DRAWINGSURFACE_DRAWCIRCLE AGS_DrawingSurface_DrawCircle;
+_AGS_DRAWINGSURFACE_DRAWIMAGE AGS_DrawingSurface_DrawImage;
+_AGS_DRAWINGSURFACE_DRAWLINE AGS_DrawingSurface_DrawLine;
+_AGS_DRAWINGSURFACE_DRAWMESSAGEWRAPPED AGS_DrawingSurface_DrawMessageWrapped;
+_AGS_DRAWINGSURFACE_DRAWPIXEL AGS_DrawingSurface_DrawPixel;
+_AGS_DRAWINGSURFACE_DRAWRECTANGLE AGS_DrawingSurface_DrawRectangle;
+_AGS_DRAWINGSURFACE_DRAWSTRING AGS_DrawingSurface_DrawString;
+_AGS_DRAWINGSURFACE_DRAWSTRINGWRAPPED AGS_DrawingSurface_DrawStringWrapped;
+_AGS_DRAWINGSURFACE_DRAWSURFACE AGS_DrawingSurface_DrawSurface;
+_AGS_DRAWINGSURFACE_DRAWTRIANGLE AGS_DrawingSurface_DrawTriangle;
+_AGS_DRAWINGSURFACE_GETPIXEL AGS_DrawingSurface_GetPixel;
+_AGS_DRAWINGSURFACE_RELEASE AGS_DrawingSurface_Release;
+_AGS_DRAWINGSURFACE_GET_DRAWINGCOLOR AGS_DrawingSurface_get_DrawingColor;
+_AGS_DRAWINGSURFACE_SET_DRAWINGCOLOR AGS_DrawingSurface_set_DrawingColor;
+_AGS_DRAWINGSURFACE_GET_HEIGHT AGS_DrawingSurface_get_Height;
+_AGS_DRAWINGSURFACE_GET_USEHIGHRESCOORDINATES AGS_DrawingSurface_get_UseHighResCoordinates;
+_AGS_DRAWINGSURFACE_SET_USEHIGHRESCOORDINATES AGS_DrawingSurface_set_UseHighResCoordinates;
+_AGS_DRAWINGSURFACE_GET_WIDTH AGS_DrawingSurface_get_Width;
+
+// Room method instances
+_AGS_ROOM_GETTEXTPROPERTY AGS_Room_GetTextProperty;
+_AGS_ROOM_GETDRAWINGSURFACEFORBACKGROUND AGS_Room_GetDrawingSurfaceForBackground;
+_AGS_ROOM_GET_BOTTOMEDGE AGS_Room_get_BottomEdge;
+_AGS_ROOM_GET_COLORDEPTH AGS_Room_get_ColorDepth;
+_AGS_ROOM_GET_HEIGHT AGS_Room_get_Height;
+_AGS_ROOM_GET_LEFTEDGE AGS_Room_get_LeftEdge;
+_AGS_ROOM_GETI_MESSAGES AGS_Room_geti_Messages;
+_AGS_ROOM_GET_MUSICONLOAD AGS_Room_get_MusicOnLoad;
+_AGS_ROOM_GET_OBJECTCOUNT AGS_Room_get_ObjectCount;
+_AGS_ROOM_GET_RIGHTEDGE AGS_Room_get_RightEdge;
+_AGS_ROOM_GET_TOPEDGE AGS_Room_get_TopEdge;
+_AGS_ROOM_GET_WIDTH AGS_Room_get_Width;
+
+// Game method instances
+_AGS_GAME_CHANGETRANSLATION AGS_Game_ChangeTranslation;
+_AGS_GAME_DOONCEONLY AGS_Game_DoOnceOnly;
+_AGS_GAME_GETCOLORFROMRGB AGS_Game_GetColorFromRGB;
+_AGS_GAME_GETFRAMECOUNTFORLOOP AGS_Game_GetFrameCountForLoop;
+_AGS_GAME_GETLOCATIONNAME AGS_Game_GetLocationName;
+_AGS_GAME_GETLOOPCOUNTFORVIEW AGS_Game_GetLoopCountForView;
+_AGS_GAME_GETMODPATTERN AGS_Game_GetMODPattern;
+_AGS_GAME_GETRUNNEXTSETTINGFORLOOP AGS_Game_GetRunNextSettingForLoop;
+_AGS_GAME_GETSAVESLOTDESCRIPTION AGS_Game_GetSaveSlotDescription;
+_AGS_GAME_GETVIEWFRAME AGS_Game_GetViewFrame;
+_AGS_GAME_INPUTBOX AGS_Game_InputBox;
+_AGS_GAME_ISAUDIOPLAYING AGS_Game_IsAudioPlaying;
+_AGS_GAME_SETSAVEGAMEDIRECTORY AGS_Game_SetSaveGameDirectory;
+_AGS_GAME_STOPAUDIO AGS_Game_StopAudio;
+_AGS_GAME_STOPSOUND AGS_Game_StopSound;
+_AGS_GAME_GET_CHARACTERCOUNT AGS_Game_get_CharacterCount;
+_AGS_GAME_GET_DIALOGCOUNT AGS_Game_get_DialogCount;
+_AGS_GAME_GET_FILENAME AGS_Game_get_FileName;
+_AGS_GAME_GET_FONTCOUNT AGS_Game_get_FontCount;
+_AGS_GAME_GETI_GLOBALMESSAGES AGS_Game_geti_GlobalMessages;
+_AGS_GAME_GETI_GLOBALSTRINGS AGS_Game_geti_GlobalStrings;
+_AGS_GAME_SETI_GLOBALSTRINGS AGS_Game_seti_GlobalStrings;
+_AGS_GAME_GET_GUICOUNT AGS_Game_get_GUICount;
+_AGS_GAME_GET_IGNOREUSERINPUTAFTERTEXTTIMEOUTMS AGS_Game_get_IgnoreUserInputAfterTextTimeoutMs;
+_AGS_GAME_SET_IGNOREUSERINPUTAFTERTEXTTIMEOUTMS AGS_Game_set_IgnoreUserInputAfterTextTimeoutMs;
+_AGS_GAME_GET_INSKIPPABLECUTSCENE AGS_Game_get_InSkippableCutscene;
+_AGS_GAME_GET_INVENTORYITEMCOUNT AGS_Game_get_InventoryItemCount;
+_AGS_GAME_GET_MINIMUMTEXTDISPLAYTIMEMS AGS_Game_get_MinimumTextDisplayTimeMs;
+_AGS_GAME_SET_MINIMUMTEXTDISPLAYTIMEMS AGS_Game_set_MinimumTextDisplayTimeMs;
+_AGS_GAME_GET_MOUSECURSORCOUNT AGS_Game_get_MouseCursorCount;
+_AGS_GAME_GET_NAME AGS_Game_get_Name;
+_AGS_GAME_SET_NAME AGS_Game_set_Name;
+_AGS_GAME_GET_NORMALFONT AGS_Game_get_NormalFont;
+_AGS_GAME_SET_NORMALFONT AGS_Game_set_NormalFont;
+_AGS_GAME_GET_SKIPPINGCUTSCENE AGS_Game_get_SkippingCutscene;
+_AGS_GAME_GET_SPEECHFONT AGS_Game_get_SpeechFont;
+_AGS_GAME_SET_SPEECHFONT AGS_Game_set_SpeechFont;
+_AGS_GAME_GETI_SPRITEHEIGHT AGS_Game_geti_SpriteHeight;
+_AGS_GAME_GETI_SPRITEWIDTH AGS_Game_geti_SpriteWidth;
+_AGS_GAME_GET_TEXTREADINGSPEED AGS_Game_get_TextReadingSpeed;
+_AGS_GAME_SET_TEXTREADINGSPEED AGS_Game_set_TextReadingSpeed;
+_AGS_GAME_GET_TRANSLATIONFILENAME AGS_Game_get_TranslationFilename;
+_AGS_GAME_GET_USENATIVECOORDINATES AGS_Game_get_UseNativeCoordinates;
+_AGS_GAME_GET_VIEWCOUNT AGS_Game_get_ViewCount;
+
+// Parser method instances
+_AGS_PARSER_FINDWORDID AGS_Parser_FindWordID;
+_AGS_PARSER_PARSETEXT AGS_Parser_ParseText;
+_AGS_PARSER_SAID AGS_Parser_Said;
+_AGS_PARSER_SAIDUNKNOWNWORD AGS_Parser_SaidUnknownWord;
+
+// Mouse method instances
+_AGS_MOUSE_CHANGEMODEGRAPHIC AGS_Mouse_ChangeModeGraphic;
+_AGS_MOUSE_CHANGEMODEHOTSPOT AGS_Mouse_ChangeModeHotspot;
+_AGS_MOUSE_CHANGEMODEVIEW AGS_Mouse_ChangeModeView;
+_AGS_MOUSE_DISABLEMODE AGS_Mouse_DisableMode;
+_AGS_MOUSE_ENABLEMODE AGS_Mouse_EnableMode;
+_AGS_MOUSE_GETMODEGRAPHIC AGS_Mouse_GetModeGraphic;
+_AGS_MOUSE_ISBUTTONDOWN AGS_Mouse_IsButtonDown;
+_AGS_MOUSE_SAVECURSORUNTILITLEAVES AGS_Mouse_SaveCursorUntilItLeaves;
+_AGS_MOUSE_SELECTNEXTMODE AGS_Mouse_SelectNextMode;
+_AGS_MOUSE_SETBOUNDS AGS_Mouse_SetBounds;
+_AGS_MOUSE_SETPOSITION AGS_Mouse_SetPosition;
+_AGS_MOUSE_UPDATE AGS_Mouse_Update;
+_AGS_MOUSE_USEDEFAULTGRAPHIC AGS_Mouse_UseDefaultGraphic;
+_AGS_MOUSE_USEMODEGRAPHIC AGS_Mouse_UseModeGraphic;
+_AGS_MOUSE_GET_MODE AGS_Mouse_get_Mode;
+_AGS_MOUSE_SET_MODE AGS_Mouse_set_Mode;
+_AGS_MOUSE_GET_VISIBLE AGS_Mouse_get_Visible;
+_AGS_MOUSE_SET_VISIBLE AGS_Mouse_set_Visible;
+
+// File method instances
+_AGS_FILE_DELETE AGS_File_Delete;
+_AGS_FILE_EXISTS AGS_File_Exists;
+_AGS_FILE_OPEN AGS_File_Open;
+_AGS_FILE_CLOSE AGS_File_Close;
+_AGS_FILE_READINT AGS_File_ReadInt;
+_AGS_FILE_READRAWCHAR AGS_File_ReadRawChar;
+_AGS_FILE_READRAWINT AGS_File_ReadRawInt;
+_AGS_FILE_READRAWLINEBACK AGS_File_ReadRawLineBack;
+_AGS_FILE_READSTRINGBACK AGS_File_ReadStringBack;
+_AGS_FILE_WRITEINT AGS_File_WriteInt;
+_AGS_FILE_WRITERAWCHAR AGS_File_WriteRawChar;
+_AGS_FILE_WRITERAWLINE AGS_File_WriteRawLine;
+_AGS_FILE_WRITESTRING AGS_File_WriteString;
+_AGS_FILE_GET_EOF AGS_File_get_EOF;
+_AGS_FILE_GET_ERROR AGS_File_get_Error;
+
+// InventoryItem method instances
+_AGS_INVENTORYITEM_GETATSCREENXY AGS_InventoryItem_GetAtScreenXY;
+_AGS_INVENTORYITEM_GETPROPERTY AGS_InventoryItem_GetProperty;
+_AGS_INVENTORYITEM_GETTEXTPROPERTY AGS_InventoryItem_GetTextProperty;
+_AGS_INVENTORYITEM_ISINTERACTIONAVAILABLE AGS_InventoryItem_IsInteractionAvailable;
+_AGS_INVENTORYITEM_RUNINTERACTION AGS_InventoryItem_RunInteraction;
+_AGS_INVENTORYITEM_GET_CURSORGRAPHIC AGS_InventoryItem_get_CursorGraphic;
+_AGS_INVENTORYITEM_SET_CURSORGRAPHIC AGS_InventoryItem_set_CursorGraphic;
+_AGS_INVENTORYITEM_GET_GRAPHIC AGS_InventoryItem_get_Graphic;
+_AGS_INVENTORYITEM_SET_GRAPHIC AGS_InventoryItem_set_Graphic;
+_AGS_INVENTORYITEM_GET_ID AGS_InventoryItem_get_ID;
+_AGS_INVENTORYITEM_GET_NAME AGS_InventoryItem_get_Name;
+_AGS_INVENTORYITEM_SET_NAME AGS_InventoryItem_set_Name;
+
+// Overlay method instances
+_AGS_OVERLAY_CREATEGRAPHICAL AGS_Overlay_CreateGraphical;
+_AGS_OVERLAY_CREATETEXTUAL AGS_Overlay_CreateTextual;
+_AGS_OVERLAY_SETTEXT AGS_Overlay_SetText;
+_AGS_OVERLAY_REMOVE AGS_Overlay_Remove;
+_AGS_OVERLAY_GET_VALID AGS_Overlay_get_Valid;
+_AGS_OVERLAY_GET_X AGS_Overlay_get_X;
+_AGS_OVERLAY_SET_X AGS_Overlay_set_X;
+_AGS_OVERLAY_GET_Y AGS_Overlay_get_Y;
+_AGS_OVERLAY_SET_Y AGS_Overlay_set_Y;
+
+// DynamicSprite method instances
+_AGS_DYNAMICSPRITE_CREATE AGS_DynamicSprite_Create;
+_AGS_DYNAMICSPRITE_CREATEFROMBACKGROUND AGS_DynamicSprite_CreateFromBackground;
+_AGS_DYNAMICSPRITE_CREATEFROMDRAWINGSURFACE AGS_DynamicSprite_CreateFromDrawingSurface;
+_AGS_DYNAMICSPRITE_CREATEFROMEXISTINGSPRITE AGS_DynamicSprite_CreateFromExistingSprite;
+_AGS_DYNAMICSPRITE_CREATEFROMFILE AGS_DynamicSprite_CreateFromFile;
+_AGS_DYNAMICSPRITE_CREATEFROMSAVEGAME AGS_DynamicSprite_CreateFromSaveGame;
+_AGS_DYNAMICSPRITE_CREATEFROMSCREENSHOT AGS_DynamicSprite_CreateFromScreenShot;
+_AGS_DYNAMICSPRITE_CHANGECANVASSIZE AGS_DynamicSprite_ChangeCanvasSize;
+_AGS_DYNAMICSPRITE_COPYTRANSPARENCYMASK AGS_DynamicSprite_CopyTransparencyMask;
+_AGS_DYNAMICSPRITE_CROP AGS_DynamicSprite_Crop;
+_AGS_DYNAMICSPRITE_DELETE AGS_DynamicSprite_Delete;
+_AGS_DYNAMICSPRITE_FLIP AGS_DynamicSprite_Flip;
+_AGS_DYNAMICSPRITE_GETDRAWINGSURFACE AGS_DynamicSprite_GetDrawingSurface;
+_AGS_DYNAMICSPRITE_RESIZE AGS_DynamicSprite_Resize;
+_AGS_DYNAMICSPRITE_ROTATE AGS_DynamicSprite_Rotate;
+_AGS_DYNAMICSPRITE_SAVETOFILE AGS_DynamicSprite_SaveToFile;
+_AGS_DYNAMICSPRITE_TINT AGS_DynamicSprite_Tint;
+_AGS_DYNAMICSPRITE_GET_COLORDEPTH AGS_DynamicSprite_get_ColorDepth;
+_AGS_DYNAMICSPRITE_GET_GRAPHIC AGS_DynamicSprite_get_Graphic;
+_AGS_DYNAMICSPRITE_GET_HEIGHT AGS_DynamicSprite_get_Height;
+_AGS_DYNAMICSPRITE_GET_WIDTH AGS_DynamicSprite_get_Width;
+
+// GUIControl method instances
+_AGS_GUICONTROL_BRINGTOFRONT AGS_GUIControl_BringToFront;
+_AGS_GUICONTROL_GETATSCREENXY AGS_GUIControl_GetAtScreenXY;
+_AGS_GUICONTROL_SENDTOBACK AGS_GUIControl_SendToBack;
+_AGS_GUICONTROL_SETPOSITION AGS_GUIControl_SetPosition;
+_AGS_GUICONTROL_SETSIZE AGS_GUIControl_SetSize;
+_AGS_GUICONTROL_GET_ASBUTTON AGS_GUIControl_get_AsButton;
+_AGS_GUICONTROL_GET_ASINVWINDOW AGS_GUIControl_get_AsInvWindow;
+_AGS_GUICONTROL_GET_ASLABEL AGS_GUIControl_get_AsLabel;
+_AGS_GUICONTROL_GET_ASLISTBOX AGS_GUIControl_get_AsListBox;
+_AGS_GUICONTROL_GET_ASSLIDER AGS_GUIControl_get_AsSlider;
+_AGS_GUICONTROL_GET_ASTEXTBOX AGS_GUIControl_get_AsTextBox;
+_AGS_GUICONTROL_GET_CLICKABLE AGS_GUIControl_get_Clickable;
+_AGS_GUICONTROL_SET_CLICKABLE AGS_GUIControl_set_Clickable;
+_AGS_GUICONTROL_GET_ENABLED AGS_GUIControl_get_Enabled;
+_AGS_GUICONTROL_SET_ENABLED AGS_GUIControl_set_Enabled;
+_AGS_GUICONTROL_GET_HEIGHT AGS_GUIControl_get_Height;
+_AGS_GUICONTROL_SET_HEIGHT AGS_GUIControl_set_Height;
+_AGS_GUICONTROL_GET_ID AGS_GUIControl_get_ID;
+_AGS_GUICONTROL_GET_OWNINGGUI AGS_GUIControl_get_OwningGUI;
+_AGS_GUICONTROL_GET_VISIBLE AGS_GUIControl_get_Visible;
+_AGS_GUICONTROL_SET_VISIBLE AGS_GUIControl_set_Visible;
+_AGS_GUICONTROL_GET_WIDTH AGS_GUIControl_get_Width;
+_AGS_GUICONTROL_SET_WIDTH AGS_GUIControl_set_Width;
+_AGS_GUICONTROL_GET_X AGS_GUIControl_get_X;
+_AGS_GUICONTROL_SET_X AGS_GUIControl_set_X;
+_AGS_GUICONTROL_GET_Y AGS_GUIControl_get_Y;
+_AGS_GUICONTROL_SET_Y AGS_GUIControl_set_Y;
+
+// Label method instances
+_AGS_LABEL_GET_FONT AGS_Label_get_Font;
+_AGS_LABEL_SET_FONT AGS_Label_set_Font;
+_AGS_LABEL_GET_TEXT AGS_Label_get_Text;
+_AGS_LABEL_SET_TEXT AGS_Label_set_Text;
+_AGS_LABEL_GET_TEXTCOLOR AGS_Label_get_TextColor;
+_AGS_LABEL_SET_TEXTCOLOR AGS_Label_set_TextColor;
+
+// Button method instances
+_AGS_BUTTON_ANIMATE AGS_Button_Animate;
+_AGS_BUTTON_GET_CLIPIMAGE AGS_Button_get_ClipImage;
+_AGS_BUTTON_SET_CLIPIMAGE AGS_Button_set_ClipImage;
+_AGS_BUTTON_GET_FONT AGS_Button_get_Font;
+_AGS_BUTTON_SET_FONT AGS_Button_set_Font;
+_AGS_BUTTON_GET_GRAPHIC AGS_Button_get_Graphic;
+_AGS_BUTTON_GET_MOUSEOVERGRAPHIC AGS_Button_get_MouseOverGraphic;
+_AGS_BUTTON_SET_MOUSEOVERGRAPHIC AGS_Button_set_MouseOverGraphic;
+_AGS_BUTTON_GET_NORMALGRAPHIC AGS_Button_get_NormalGraphic;
+_AGS_BUTTON_SET_NORMALGRAPHIC AGS_Button_set_NormalGraphic;
+_AGS_BUTTON_GET_PUSHEDGRAPHIC AGS_Button_get_PushedGraphic;
+_AGS_BUTTON_SET_PUSHEDGRAPHIC AGS_Button_set_PushedGraphic;
+_AGS_BUTTON_GET_TEXTCOLOR AGS_Button_get_TextColor;
+_AGS_BUTTON_SET_TEXTCOLOR AGS_Button_set_TextColor;
+_AGS_BUTTON_GET_TEXT AGS_Button_get_Text;
+_AGS_BUTTON_SET_TEXT AGS_Button_set_Text;
+
+// Slider method instances
+_AGS_SLIDER_GET_BACKGROUNDGRAPHIC AGS_Slider_get_BackgroundGraphic;
+_AGS_SLIDER_SET_BACKGROUNDGRAPHIC AGS_Slider_set_BackgroundGraphic;
+_AGS_SLIDER_GET_HANDLEGRAPHIC AGS_Slider_get_HandleGraphic;
+_AGS_SLIDER_SET_HANDLEGRAPHIC AGS_Slider_set_HandleGraphic;
+_AGS_SLIDER_GET_HANDLEOFFSET AGS_Slider_get_HandleOffset;
+_AGS_SLIDER_SET_HANDLEOFFSET AGS_Slider_set_HandleOffset;
+_AGS_SLIDER_GET_MAX AGS_Slider_get_Max;
+_AGS_SLIDER_SET_MAX AGS_Slider_set_Max;
+_AGS_SLIDER_GET_MIN AGS_Slider_get_Min;
+_AGS_SLIDER_SET_MIN AGS_Slider_set_Min;
+_AGS_SLIDER_GET_VALUE AGS_Slider_get_Value;
+_AGS_SLIDER_SET_VALUE AGS_Slider_set_Value;
+
+// TextBox method instances
+_AGS_TEXTBOX_GET_FONT AGS_TextBox_get_Font;
+_AGS_TEXTBOX_SET_FONT AGS_TextBox_set_Font;
+_AGS_TEXTBOX_GET_TEXT AGS_TextBox_get_Text;
+_AGS_TEXTBOX_SET_TEXT AGS_TextBox_set_Text;
+_AGS_TEXTBOX_GET_TEXTCOLOR AGS_TextBox_get_TextColor;
+_AGS_TEXTBOX_SET_TEXTCOLOR AGS_TextBox_set_TextColor;
+
+// InvWindow method instances
+_AGS_INVWINDOW_SCROLLDOWN AGS_InvWindow_ScrollDown;
+_AGS_INVWINDOW_SCROLLUP AGS_InvWindow_ScrollUp;
+_AGS_INVWINDOW_GET_CHARACTERTOUSE AGS_InvWindow_get_CharacterToUse;
+_AGS_INVWINDOW_SET_CHARACTERTOUSE AGS_InvWindow_set_CharacterToUse;
+_AGS_INVWINDOW_GETI_ITEMATINDEX AGS_InvWindow_geti_ItemAtIndex;
+_AGS_INVWINDOW_GET_ITEMCOUNT AGS_InvWindow_get_ItemCount;
+_AGS_INVWINDOW_GET_ITEMHEIGHT AGS_InvWindow_get_ItemHeight;
+_AGS_INVWINDOW_SET_ITEMHEIGHT AGS_InvWindow_set_ItemHeight;
+_AGS_INVWINDOW_GET_ITEMWIDTH AGS_InvWindow_get_ItemWidth;
+_AGS_INVWINDOW_SET_ITEMWIDTH AGS_InvWindow_set_ItemWidth;
+_AGS_INVWINDOW_GET_TOPITEM AGS_InvWindow_get_TopItem;
+_AGS_INVWINDOW_SET_TOPITEM AGS_InvWindow_set_TopItem;
+_AGS_INVWINDOW_GET_ITEMSPERROW AGS_InvWindow_get_ItemsPerRow;
+_AGS_INVWINDOW_GET_ROWCOUNT AGS_InvWindow_get_RowCount;
+
+// ListBox method instances
+_AGS_LISTBOX_ADDITEM AGS_ListBox_AddItem;
+_AGS_LISTBOX_CLEAR AGS_ListBox_Clear;
+_AGS_LISTBOX_FILLDIRLIST AGS_ListBox_FillDirList;
+_AGS_LISTBOX_FILLSAVEGAMELIST AGS_ListBox_FillSaveGameList;
+_AGS_LISTBOX_GETITEMATLOCATION AGS_ListBox_GetItemAtLocation;
+_AGS_LISTBOX_INSERTITEMAT AGS_ListBox_InsertItemAt;
+_AGS_LISTBOX_REMOVEITEM AGS_ListBox_RemoveItem;
+_AGS_LISTBOX_SCROLLDOWN AGS_ListBox_ScrollDown;
+_AGS_LISTBOX_SCROLLUP AGS_ListBox_ScrollUp;
+_AGS_LISTBOX_GET_FONT AGS_ListBox_get_Font;
+_AGS_LISTBOX_SET_FONT AGS_ListBox_set_Font;
+_AGS_LISTBOX_GET_HIDEBORDER AGS_ListBox_get_HideBorder;
+_AGS_LISTBOX_SET_HIDEBORDER AGS_ListBox_set_HideBorder;
+_AGS_LISTBOX_GET_HIDESCROLLARROWS AGS_ListBox_get_HideScrollArrows;
+_AGS_LISTBOX_SET_HIDESCROLLARROWS AGS_ListBox_set_HideScrollArrows;
+_AGS_LISTBOX_GET_ITEMCOUNT AGS_ListBox_get_ItemCount;
+_AGS_LISTBOX_GETI_ITEMS AGS_ListBox_geti_Items;
+_AGS_LISTBOX_SETI_ITEMS AGS_ListBox_seti_Items;
+_AGS_LISTBOX_GET_ROWCOUNT AGS_ListBox_get_RowCount;
+_AGS_LISTBOX_GETI_SAVEGAMESLOTS AGS_ListBox_geti_SaveGameSlots;
+_AGS_LISTBOX_GET_SELECTEDINDEX AGS_ListBox_get_SelectedIndex;
+_AGS_LISTBOX_SET_SELECTEDINDEX AGS_ListBox_set_SelectedIndex;
+_AGS_LISTBOX_GET_TOPITEM AGS_ListBox_get_TopItem;
+_AGS_LISTBOX_SET_TOPITEM AGS_ListBox_set_TopItem;
+
+// GUI method instances
+_AGS_GUI_CENTRE AGS_GUI_Centre;
+_AGS_GUI_GETATSCREENXY AGS_GUI_GetAtScreenXY;
+_AGS_GUI_SETPOSITION AGS_GUI_SetPosition;
+_AGS_GUI_SETSIZE AGS_GUI_SetSize;
+_AGS_GUI_GET_BACKGROUNDGRAPHIC AGS_GUI_get_BackgroundGraphic;
+_AGS_GUI_SET_BACKGROUNDGRAPHIC AGS_GUI_set_BackgroundGraphic;
+_AGS_GUI_GET_CLICKABLE AGS_GUI_get_Clickable;
+_AGS_GUI_SET_CLICKABLE AGS_GUI_set_Clickable;
+_AGS_GUI_GETI_CONTROLS AGS_GUI_geti_Controls;
+_AGS_GUI_GET_CONTROLCOUNT AGS_GUI_get_ControlCount;
+_AGS_GUI_GET_HEIGHT AGS_GUI_get_Height;
+_AGS_GUI_SET_HEIGHT AGS_GUI_set_Height;
+_AGS_GUI_GET_ID AGS_GUI_get_ID;
+_AGS_GUI_GET_TRANSPARENCY AGS_GUI_get_Transparency;
+_AGS_GUI_SET_TRANSPARENCY AGS_GUI_set_Transparency;
+_AGS_GUI_GET_VISIBLE AGS_GUI_get_Visible;
+_AGS_GUI_SET_VISIBLE AGS_GUI_set_Visible;
+_AGS_GUI_GET_WIDTH AGS_GUI_get_Width;
+_AGS_GUI_SET_WIDTH AGS_GUI_set_Width;
+_AGS_GUI_GET_X AGS_GUI_get_X;
+_AGS_GUI_SET_X AGS_GUI_set_X;
+_AGS_GUI_GET_Y AGS_GUI_get_Y;
+_AGS_GUI_SET_Y AGS_GUI_set_Y;
+_AGS_GUI_GET_ZORDER AGS_GUI_get_ZOrder;
+_AGS_GUI_SET_ZORDER AGS_GUI_set_ZOrder;
+
+// Hotspot method instances
+_AGS_HOTSPOT_GETATSCREENXY AGS_Hotspot_GetAtScreenXY;
+_AGS_HOTSPOT_GETPROPERTY AGS_Hotspot_GetProperty;
+_AGS_HOTSPOT_GETTEXTPROPERTY AGS_Hotspot_GetTextProperty;
+_AGS_HOTSPOT_RUNINTERACTION AGS_Hotspot_RunInteraction;
+_AGS_HOTSPOT_GET_ENABLED AGS_Hotspot_get_Enabled;
+_AGS_HOTSPOT_SET_ENABLED AGS_Hotspot_set_Enabled;
+_AGS_HOTSPOT_GET_ID AGS_Hotspot_get_ID;
+_AGS_HOTSPOT_GET_NAME AGS_Hotspot_get_Name;
+_AGS_HOTSPOT_GET_WALKTOX AGS_Hotspot_get_WalkToX;
+_AGS_HOTSPOT_GET_WALKTOY AGS_Hotspot_get_WalkToY;
+
+// Region method instances
+_AGS_REGION_GETATROOMXY AGS_Region_GetAtRoomXY;
+_AGS_REGION_RUNINTERACTION AGS_Region_RunInteraction;
+_AGS_REGION_TINT AGS_Region_Tint;
+_AGS_REGION_GET_ENABLED AGS_Region_get_Enabled;
+_AGS_REGION_SET_ENABLED AGS_Region_set_Enabled;
+_AGS_REGION_GET_ID AGS_Region_get_ID;
+_AGS_REGION_GET_LIGHTLEVEL AGS_Region_get_LightLevel;
+_AGS_REGION_SET_LIGHTLEVEL AGS_Region_set_LightLevel;
+_AGS_REGION_GET_TINTENABLED AGS_Region_get_TintEnabled;
+_AGS_REGION_GET_TINTBLUE AGS_Region_get_TintBlue;
+_AGS_REGION_GET_TINTGREEN AGS_Region_get_TintGreen;
+_AGS_REGION_GET_TINTRED AGS_Region_get_TintRed;
+_AGS_REGION_GET_TINTSATURATION AGS_Region_get_TintSaturation;
+
+// Dialog method instances
+_AGS_DIALOG_DISPLAYOPTIONS AGS_Dialog_DisplayOptions;
+_AGS_DIALOG_GETOPTIONSTATE AGS_Dialog_GetOptionState;
+_AGS_DIALOG_GETOPTIONTEXT AGS_Dialog_GetOptionText;
+_AGS_DIALOG_HASOPTIONBEENCHOSEN AGS_Dialog_HasOptionBeenChosen;
+_AGS_DIALOG_SETOPTIONSTATE AGS_Dialog_SetOptionState;
+_AGS_DIALOG_START AGS_Dialog_Start;
+_AGS_DIALOG_GET_ID AGS_Dialog_get_ID;
+_AGS_DIALOG_GET_OPTIONCOUNT AGS_Dialog_get_OptionCount;
+
+// DateTime method instances
+_AGS_DATETIME_GET_NOW AGS_DateTime_get_Now;
+_AGS_DATETIME_GET_YEAR AGS_DateTime_get_Year;
+_AGS_DATETIME_GET_MONTH AGS_DateTime_get_Month;
+_AGS_DATETIME_GET_DAYOFMONTH AGS_DateTime_get_DayOfMonth;
+_AGS_DATETIME_GET_HOUR AGS_DateTime_get_Hour;
+_AGS_DATETIME_GET_MINUTE AGS_DateTime_get_Minute;
+_AGS_DATETIME_GET_SECOND AGS_DateTime_get_Second;
+_AGS_DATETIME_GET_RAWTIME AGS_DateTime_get_RawTime;
+
+// AudioChannel method instances
+_AGS_AUDIOCHANNEL_SEEK AGS_AudioChannel_Seek;
+_AGS_AUDIOCHANNEL_SETROOMLOCATION AGS_AudioChannel_SetRoomLocation;
+_AGS_AUDIOCHANNEL_STOP AGS_AudioChannel_Stop;
+_AGS_AUDIOCHANNEL_GET_ID AGS_AudioChannel_get_ID;
+_AGS_AUDIOCHANNEL_GET_ISPLAYING AGS_AudioChannel_get_IsPlaying;
+_AGS_AUDIOCHANNEL_GET_LENGTHMS AGS_AudioChannel_get_LengthMs;
+_AGS_AUDIOCHANNEL_GET_PANNING AGS_AudioChannel_get_Panning;
+_AGS_AUDIOCHANNEL_SET_PANNING AGS_AudioChannel_set_Panning;
+_AGS_AUDIOCHANNEL_GET_PLAYINGCLIP AGS_AudioChannel_get_PlayingClip;
+_AGS_AUDIOCHANNEL_GET_POSITION AGS_AudioChannel_get_Position;
+_AGS_AUDIOCHANNEL_GET_POSITIONMS AGS_AudioChannel_get_PositionMs;
+_AGS_AUDIOCHANNEL_GET_VOLUME AGS_AudioChannel_get_Volume;
+_AGS_AUDIOCHANNEL_SET_VOLUME AGS_AudioChannel_set_Volume;
+
+// AudioClip method instances
+_AGS_AUDIOCLIP_PLAY AGS_AudioClip_Play;
+_AGS_AUDIOCLIP_PLAYFROM AGS_AudioClip_PlayFrom;
+_AGS_AUDIOCLIP_PLAYQUEUED AGS_AudioClip_PlayQueued;
+_AGS_AUDIOCLIP_STOP AGS_AudioClip_Stop;
+_AGS_AUDIOCLIP_GET_FILETYPE AGS_AudioClip_get_FileType;
+_AGS_AUDIOCLIP_GET_ISAVAILABLE AGS_AudioClip_get_IsAvailable;
+_AGS_AUDIOCLIP_GET_TYPE AGS_AudioClip_get_Type;
+
+// System method instances
+_AGS_SYSTEM_GET_CAPSLOCK AGS_System_get_CapsLock;
+_AGS_SYSTEM_GETI_AUDIOCHANNELS AGS_System_geti_AudioChannels;
+_AGS_SYSTEM_GET_AUDIOCHANNELCOUNT AGS_System_get_AudioChannelCount;
+_AGS_SYSTEM_GET_COLORDEPTH AGS_System_get_ColorDepth;
+_AGS_SYSTEM_GET_GAMMA AGS_System_get_Gamma;
+_AGS_SYSTEM_SET_GAMMA AGS_System_set_Gamma;
+_AGS_SYSTEM_GET_HARDWAREACCELERATION AGS_System_get_HardwareAcceleration;
+_AGS_SYSTEM_GET_NUMLOCK AGS_System_get_NumLock;
+_AGS_SYSTEM_GET_OPERATINGSYSTEM AGS_System_get_OperatingSystem;
+_AGS_SYSTEM_GET_SCREENHEIGHT AGS_System_get_ScreenHeight;
+_AGS_SYSTEM_GET_SCREENWIDTH AGS_System_get_ScreenWidth;
+_AGS_SYSTEM_GET_SCROLLLOCK AGS_System_get_ScrollLock;
+_AGS_SYSTEM_GET_SUPPORTSGAMMACONTROL AGS_System_get_SupportsGammaControl;
+_AGS_SYSTEM_GET_VERSION AGS_System_get_Version;
+_AGS_SYSTEM_GET_VIEWPORTHEIGHT AGS_System_get_ViewportHeight;
+_AGS_SYSTEM_GET_VIEWPORTWIDTH AGS_System_get_ViewportWidth;
+_AGS_SYSTEM_GET_VOLUME AGS_System_get_Volume;
+_AGS_SYSTEM_SET_VOLUME AGS_System_set_Volume;
+_AGS_SYSTEM_GET_VSYNC AGS_System_get_VSync;
+_AGS_SYSTEM_SET_VSYNC AGS_System_set_VSync;
+_AGS_SYSTEM_GET_WINDOWED AGS_System_get_Windowed;
+
+// Object method instances
+_AGS_OBJECT_ANIMATE AGS_Object_Animate;
+_AGS_OBJECT_GETATSCREENXY AGS_Object_GetAtScreenXY;
+_AGS_OBJECT_GETPROPERTY AGS_Object_GetProperty;
+_AGS_OBJECT_GETTEXTPROPERTY AGS_Object_GetTextProperty;
+_AGS_OBJECT_ISCOLLIDINGWITHOBJECT AGS_Object_IsCollidingWithObject;
+_AGS_OBJECT_MERGEINTOBACKGROUND AGS_Object_MergeIntoBackground;
+_AGS_OBJECT_MOVE AGS_Object_Move;
+_AGS_OBJECT_REMOVETINT AGS_Object_RemoveTint;
+_AGS_OBJECT_RUNINTERACTION AGS_Object_RunInteraction;
+_AGS_OBJECT_SETPOSITION AGS_Object_SetPosition;
+_AGS_OBJECT_SETVIEW AGS_Object_SetView;
+_AGS_OBJECT_STOPANIMATING AGS_Object_StopAnimating;
+_AGS_OBJECT_STOPMOVING AGS_Object_StopMoving;
+_AGS_OBJECT_TINT AGS_Object_Tint;
+_AGS_OBJECT_GET_ANIMATING AGS_Object_get_Animating;
+_AGS_OBJECT_GET_BASELINE AGS_Object_get_Baseline;
+_AGS_OBJECT_SET_BASELINE AGS_Object_set_Baseline;
+_AGS_OBJECT_GET_BLOCKINGHEIGHT AGS_Object_get_BlockingHeight;
+_AGS_OBJECT_SET_BLOCKINGHEIGHT AGS_Object_set_BlockingHeight;
+_AGS_OBJECT_GET_BLOCKINGWIDTH AGS_Object_get_BlockingWidth;
+_AGS_OBJECT_SET_BLOCKINGWIDTH AGS_Object_set_BlockingWidth;
+_AGS_OBJECT_GET_CLICKABLE AGS_Object_get_Clickable;
+_AGS_OBJECT_SET_CLICKABLE AGS_Object_set_Clickable;
+_AGS_OBJECT_GET_FRAME AGS_Object_get_Frame;
+_AGS_OBJECT_GET_GRAPHIC AGS_Object_get_Graphic;
+_AGS_OBJECT_SET_GRAPHIC AGS_Object_set_Graphic;
+_AGS_OBJECT_GET_ID AGS_Object_get_ID;
+_AGS_OBJECT_GET_IGNORESCALING AGS_Object_get_IgnoreScaling;
+_AGS_OBJECT_SET_IGNORESCALING AGS_Object_set_IgnoreScaling;
+_AGS_OBJECT_GET_IGNOREWALKBEHINDS AGS_Object_get_IgnoreWalkbehinds;
+_AGS_OBJECT_SET_IGNOREWALKBEHINDS AGS_Object_set_IgnoreWalkbehinds;
+_AGS_OBJECT_GET_LOOP AGS_Object_get_Loop;
+_AGS_OBJECT_GET_MOVING AGS_Object_get_Moving;
+_AGS_OBJECT_GET_NAME AGS_Object_get_Name;
+_AGS_OBJECT_GET_SOLID AGS_Object_get_Solid;
+_AGS_OBJECT_SET_SOLID AGS_Object_set_Solid;
+_AGS_OBJECT_GET_TRANSPARENCY AGS_Object_get_Transparency;
+_AGS_OBJECT_SET_TRANSPARENCY AGS_Object_set_Transparency;
+_AGS_OBJECT_GET_VIEW AGS_Object_get_View;
+_AGS_OBJECT_GET_VISIBLE AGS_Object_get_Visible;
+_AGS_OBJECT_SET_VISIBLE AGS_Object_set_Visible;
+_AGS_OBJECT_GET_X AGS_Object_get_X;
+_AGS_OBJECT_SET_X AGS_Object_set_X;
+_AGS_OBJECT_GET_Y AGS_Object_get_Y;
+_AGS_OBJECT_SET_Y AGS_Object_set_Y;
+
+// Character method instances
+_AGS_CHARACTER_ADDINVENTORY AGS_Character_AddInventory;
+_AGS_CHARACTER_ADDWAYPOINT AGS_Character_AddWaypoint;
+_AGS_CHARACTER_ANIMATE AGS_Character_Animate;
+_AGS_CHARACTER_CHANGEROOM AGS_Character_ChangeRoom;
+_AGS_CHARACTER_CHANGEROOMAUTOPOSITION AGS_Character_ChangeRoomAutoPosition;
+_AGS_CHARACTER_CHANGEVIEW AGS_Character_ChangeView;
+_AGS_CHARACTER_FACECHARACTER AGS_Character_FaceCharacter;
+_AGS_CHARACTER_FACELOCATION AGS_Character_FaceLocation;
+_AGS_CHARACTER_FACEOBJECT AGS_Character_FaceObject;
+_AGS_CHARACTER_FOLLOWCHARACTER AGS_Character_FollowCharacter;
+_AGS_CHARACTER_GETATSCREENXY AGS_Character_GetAtScreenXY;
+_AGS_CHARACTER_GETPROPERTY AGS_Character_GetProperty;
+_AGS_CHARACTER_GETTEXTPROPERTY AGS_Character_GetTextProperty;
+_AGS_CHARACTER_HASINVENTORY AGS_Character_HasInventory;
+_AGS_CHARACTER_ISCOLLIDINGWITHCHAR AGS_Character_IsCollidingWithChar;
+_AGS_CHARACTER_ISCOLLIDINGWITHOBJECT AGS_Character_IsCollidingWithObject;
+_AGS_CHARACTER_LOCKVIEW AGS_Character_LockView;
+_AGS_CHARACTER_LOCKVIEWALIGNED AGS_Character_LockViewAligned;
+_AGS_CHARACTER_LOCKVIEWFRAME AGS_Character_LockViewFrame;
+_AGS_CHARACTER_LOCKVIEWOFFSET AGS_Character_LockViewOffset;
+_AGS_CHARACTER_LOSEINVENTORY AGS_Character_LoseInventory;
+_AGS_CHARACTER_MOVE AGS_Character_Move;
+_AGS_CHARACTER_PLACEONWALKABLEAREA AGS_Character_PlaceOnWalkableArea;
+_AGS_CHARACTER_REMOVETINT AGS_Character_RemoveTint;
+_AGS_CHARACTER_RUNINTERACTION AGS_Character_RunInteraction;
+_AGS_CHARACTER_SAY AGS_Character_Say;
+_AGS_CHARACTER_SAYAT AGS_Character_SayAt;
+_AGS_CHARACTER_SAYBACKGROUND AGS_Character_SayBackground;
+_AGS_CHARACTER_SETASPLAYER AGS_Character_SetAsPlayer;
+_AGS_CHARACTER_SETIDLEVIEW AGS_Character_SetIdleView;
+_AGS_CHARACTER_SETWALKSPEED AGS_Character_SetWalkSpeed;
+_AGS_CHARACTER_STOPMOVING AGS_Character_StopMoving;
+_AGS_CHARACTER_THINK AGS_Character_Think;
+_AGS_CHARACTER_TINT AGS_Character_Tint;
+_AGS_CHARACTER_UNLOCKVIEW AGS_Character_UnlockView;
+_AGS_CHARACTER_WALK AGS_Character_Walk;
+_AGS_CHARACTER_WALKSTRAIGHT AGS_Character_WalkStraight;
+_AGS_CHARACTER_GET_ACTIVEINVENTORY AGS_Character_get_ActiveInventory;
+_AGS_CHARACTER_SET_ACTIVEINVENTORY AGS_Character_set_ActiveInventory;
+_AGS_CHARACTER_GET_ANIMATING AGS_Character_get_Animating;
+_AGS_CHARACTER_GET_ANIMATIONSPEED AGS_Character_get_AnimationSpeed;
+_AGS_CHARACTER_SET_ANIMATIONSPEED AGS_Character_set_AnimationSpeed;
+_AGS_CHARACTER_GET_BASELINE AGS_Character_get_Baseline;
+_AGS_CHARACTER_SET_BASELINE AGS_Character_set_Baseline;
+_AGS_CHARACTER_GET_BLINKINTERVAL AGS_Character_get_BlinkInterval;
+_AGS_CHARACTER_SET_BLINKINTERVAL AGS_Character_set_BlinkInterval;
+_AGS_CHARACTER_GET_BLINKVIEW AGS_Character_get_BlinkView;
+_AGS_CHARACTER_SET_BLINKVIEW AGS_Character_set_BlinkView;
+_AGS_CHARACTER_GET_BLINKWHILETHINKING AGS_Character_get_BlinkWhileThinking;
+_AGS_CHARACTER_SET_BLINKWHILETHINKING AGS_Character_set_BlinkWhileThinking;
+_AGS_CHARACTER_GET_BLOCKINGHEIGHT AGS_Character_get_BlockingHeight;
+_AGS_CHARACTER_SET_BLOCKINGHEIGHT AGS_Character_set_BlockingHeight;
+_AGS_CHARACTER_GET_BLOCKINGWIDTH AGS_Character_get_BlockingWidth;
+_AGS_CHARACTER_SET_BLOCKINGWIDTH AGS_Character_set_BlockingWidth;
+_AGS_CHARACTER_GET_CLICKABLE AGS_Character_get_Clickable;
+_AGS_CHARACTER_SET_CLICKABLE AGS_Character_set_Clickable;
+_AGS_CHARACTER_GET_DIAGONALLOOPS AGS_Character_get_DiagonalLoops;
+_AGS_CHARACTER_SET_DIAGONALLOOPS AGS_Character_set_DiagonalLoops;
+_AGS_CHARACTER_GET_FRAME AGS_Character_get_Frame;
+_AGS_CHARACTER_SET_FRAME AGS_Character_set_Frame;
+_AGS_CHARACTER_GET_HASEXPLICITTINT AGS_Character_get_HasExplicitTint;
+_AGS_CHARACTER_GET_ID AGS_Character_get_ID;
+_AGS_CHARACTER_GET_IDLEVIEW AGS_Character_get_IdleView;
+_AGS_CHARACTER_GET_IGNORELIGHTING AGS_Character_get_IgnoreLighting;
+_AGS_CHARACTER_SET_IGNORELIGHTING AGS_Character_set_IgnoreLighting;
+_AGS_CHARACTER_GET_IGNORESCALING AGS_Character_get_IgnoreScaling;
+_AGS_CHARACTER_SET_IGNORESCALING AGS_Character_set_IgnoreScaling;
+_AGS_CHARACTER_GET_IGNOREWALKBEHINDS AGS_Character_get_IgnoreWalkbehinds;
+_AGS_CHARACTER_SET_IGNOREWALKBEHINDS AGS_Character_set_IgnoreWalkbehinds;
+_AGS_CHARACTER_GETI_INVENTORYQUANTITY AGS_Character_geti_InventoryQuantity;
+_AGS_CHARACTER_SETI_INVENTORYQUANTITY AGS_Character_seti_InventoryQuantity;
+_AGS_CHARACTER_GET_LOOP AGS_Character_get_Loop;
+_AGS_CHARACTER_SET_LOOP AGS_Character_set_Loop;
+_AGS_CHARACTER_GET_MANUALSCALING AGS_Character_get_ManualScaling;
+_AGS_CHARACTER_SET_MANUALSCALING AGS_Character_set_ManualScaling;
+_AGS_CHARACTER_GET_MOVEMENTLINKEDTOANIMATION AGS_Character_get_MovementLinkedToAnimation;
+_AGS_CHARACTER_SET_MOVEMENTLINKEDTOANIMATION AGS_Character_set_MovementLinkedToAnimation;
+_AGS_CHARACTER_GET_MOVING AGS_Character_get_Moving;
+_AGS_CHARACTER_GET_NAME AGS_Character_get_Name;
+_AGS_CHARACTER_SET_NAME AGS_Character_set_Name;
+_AGS_CHARACTER_GET_NORMALVIEW AGS_Character_get_NormalView;
+_AGS_CHARACTER_GET_PREVIOUSROOM AGS_Character_get_PreviousRoom;
+_AGS_CHARACTER_GET_ROOM AGS_Character_get_Room;
+_AGS_CHARACTER_GET_SCALEMOVESPEED AGS_Character_get_ScaleMoveSpeed;
+_AGS_CHARACTER_SET_SCALEMOVESPEED AGS_Character_set_ScaleMoveSpeed;
+_AGS_CHARACTER_GET_SCALEVOLUME AGS_Character_get_ScaleVolume;
+_AGS_CHARACTER_SET_SCALEVOLUME AGS_Character_set_ScaleVolume;
+_AGS_CHARACTER_GET_SCALING AGS_Character_get_Scaling;
+_AGS_CHARACTER_SET_SCALING AGS_Character_set_Scaling;
+_AGS_CHARACTER_GET_SOLID AGS_Character_get_Solid;
+_AGS_CHARACTER_SET_SOLID AGS_Character_set_Solid;
+_AGS_CHARACTER_GET_SPEAKING AGS_Character_get_Speaking;
+_AGS_CHARACTER_GET_SPEAKINGFRAME AGS_Character_get_SpeakingFrame;
+_AGS_CHARACTER_GET_SPEECHANIMATIONDELAY AGS_Character_get_SpeechAnimationDelay;
+_AGS_CHARACTER_SET_SPEECHANIMATIONDELAY AGS_Character_set_SpeechAnimationDelay;
+_AGS_CHARACTER_GET_SPEECHCOLOR AGS_Character_get_SpeechColor;
+_AGS_CHARACTER_SET_SPEECHCOLOR AGS_Character_set_SpeechColor;
+_AGS_CHARACTER_GET_SPEECHVIEW AGS_Character_get_SpeechView;
+_AGS_CHARACTER_SET_SPEECHVIEW AGS_Character_set_SpeechView;
+_AGS_CHARACTER_GET_THINKVIEW AGS_Character_get_ThinkView;
+_AGS_CHARACTER_SET_THINKVIEW AGS_Character_set_ThinkView;
+_AGS_CHARACTER_GET_TRANSPARENCY AGS_Character_get_Transparency;
+_AGS_CHARACTER_SET_TRANSPARENCY AGS_Character_set_Transparency;
+_AGS_CHARACTER_GET_TURNBEFOREWALKING AGS_Character_get_TurnBeforeWalking;
+_AGS_CHARACTER_SET_TURNBEFOREWALKING AGS_Character_set_TurnBeforeWalking;
+_AGS_CHARACTER_GET_VIEW AGS_Character_get_View;
+_AGS_CHARACTER_GET_WALKSPEEDX AGS_Character_get_WalkSpeedX;
+_AGS_CHARACTER_GET_WALKSPEEDY AGS_Character_get_WalkSpeedY;
+_AGS_CHARACTER_GET_X AGS_Character_get_x;
+_AGS_CHARACTER_SET_X AGS_Character_set_x;
+_AGS_CHARACTER_GET_Y AGS_Character_get_y;
+_AGS_CHARACTER_SET_Y AGS_Character_set_y;
+_AGS_CHARACTER_GET_Z AGS_Character_get_z;
+_AGS_CHARACTER_SET_Z AGS_Character_set_z;
+AGS_Hotspot* luags_checkHotspot(lua_State *L, int idx, int META_IDX) {
+	AGS_RoomThing* thing = luags_checkRoomThing(L,idx,META_IDX,"Hotspot");
+	luaL_argcheck(L, thing->RoomID == ags_current_room, idx, "cannot access Hotspot methods from a different room");
+	return (AGS_Hotspot*)&ags_hotspot_array[thing->ThingID];
+}
+
+void luags_pushHotspot(lua_State *L, AGS_Hotspot* hotspot, int META_IDX, int STORE_IDX) {
+	AGS_RoomThing thing;
+	if (!hotspot) {
+		lua_pushnil(L);
+		return;
+	}
+	thing.RoomID = ags_current_room;
+	thing.ThingID = AGS_Hotspot_get_ID(hotspot);
+	lua_pushlstring(L, (const char*)&thing, sizeof(thing));
+	lua_pushvalue(L,-1);
+	lua_rawget(L, STORE_IDX);
+	if (lua_isnil(L,-1)) {
+		lua_pop(L,1);
+		memcpy(lua_newuserdata(L, sizeof(thing)), &thing, sizeof(thing));
+		// set metatable
+		lua_pushvalue(L, META_IDX);
+		lua_setmetatable(L, -2);
+		// set up function environment for expando-ness
+		lua_newtable(L);
+		lua_setfenv(L,-2);
+		lua_insert(L,-2);
+		lua_pushvalue(L,-2);
+		lua_rawset(L, STORE_IDX);
+	}
+	else {
+		lua_remove(L,-2);
+	}
+}
+
+AGS_Region* luags_checkRegion(lua_State *L, int idx, int META_IDX) {
+	AGS_RoomThing* thing = luags_checkRoomThing(L,idx,META_IDX,"Region");
+	luaL_argcheck(L, thing->RoomID == ags_current_room, idx, "cannot access Region methods from a different room");
+	return (AGS_Region*)&ags_region_array[thing->ThingID];
+}
+
+void luags_pushRegion(lua_State *L, AGS_Region* region, int META_IDX, int STORE_IDX) {
+	AGS_RoomThing thing;
+	if (!region) {
+		lua_pushnil(L);
+		return;
+	}
+	thing.RoomID = ags_current_room;
+	thing.ThingID = AGS_Region_get_ID(region);
+	lua_pushlstring(L, (const char*)&thing, sizeof(thing));
+	lua_pushvalue(L,-1);
+	lua_rawget(L, STORE_IDX);
+	if (lua_isnil(L,-1)) {
+		lua_pop(L,1);
+		memcpy(lua_newuserdata(L, sizeof(thing)), &thing, sizeof(thing));
+		// set metatable
+		lua_pushvalue(L, META_IDX);
+		lua_setmetatable(L, -2);
+		// set up function environment for expando-ness
+		lua_newtable(L);
+		lua_setfenv(L,-2);
+		lua_insert(L,-2);
+		lua_pushvalue(L,-2);
+		lua_rawset(L, STORE_IDX);
+	}
+	else {
+		lua_remove(L,-2);
+	}
+}
+
+AGS_Object* luags_checkObject(lua_State *L, int idx, int META_IDX) {
+	AGS_RoomThing* thing = luags_checkRoomThing(L,idx,META_IDX,"Object");
+	luaL_argcheck(L, thing->RoomID == ags_current_room, idx, "cannot access Object methods from a different room");
+	return (AGS_Object*)&ags_object_array[thing->ThingID];
+}
+
+void luags_pushObject(lua_State *L, AGS_Object* object, int META_IDX, int STORE_IDX) {
+	AGS_RoomThing thing;
+	if (!object) {
+		lua_pushnil(L);
+		return;
+	}
+	thing.RoomID = ags_current_room;
+	thing.ThingID = AGS_Object_get_ID(object);
+	lua_pushlstring(L, (const char*)&thing, sizeof(thing));
+	lua_pushvalue(L,-1);
+	lua_rawget(L, STORE_IDX);
+	if (lua_isnil(L,-1)) {
+		lua_pop(L,1);
+		memcpy(lua_newuserdata(L, sizeof(thing)), &thing, sizeof(thing));
+		// set metatable
+		lua_pushvalue(L, META_IDX);
+		lua_setmetatable(L, -2);
+		// set up function environment for expando-ness
+		lua_newtable(L);
+		lua_setfenv(L,-2);
+		lua_insert(L,-2);
+		lua_pushvalue(L,-2);
+		lua_rawset(L, STORE_IDX);
+	}
+	else {
+		lua_remove(L,-2);
+	}
+}
+
+
+void GetScriptFunctionAddresses(IAGSEngine* engine) {
+	// Global functions
+	AGS_Display = (_AGS_DISPLAY)engine->GetScriptFunctionAddress("Display");
+	AGS_DisplayAt = (_AGS_DISPLAYAT)engine->GetScriptFunctionAddress("DisplayAt");
+	AGS_DisplayAtY = (_AGS_DISPLAYATY)engine->GetScriptFunctionAddress("DisplayAtY");
+	AGS_DisplayMessage = (_AGS_DISPLAYMESSAGE)engine->GetScriptFunctionAddress("DisplayMessage");
+	AGS_DisplayMessageAtY = (_AGS_DISPLAYMESSAGEATY)engine->GetScriptFunctionAddress("DisplayMessageAtY");
+	AGS_DisplayTopBar = (_AGS_DISPLAYTOPBAR)engine->GetScriptFunctionAddress("DisplayTopBar");
+	AGS_DisplayMessageBar = (_AGS_DISPLAYMESSAGEBAR)engine->GetScriptFunctionAddress("DisplayMessageBar");
+	AGS_ResetRoom = (_AGS_RESETROOM)engine->GetScriptFunctionAddress("ResetRoom");
+	AGS_HasPlayerBeenInRoom = (_AGS_HASPLAYERBEENINROOM)engine->GetScriptFunctionAddress("HasPlayerBeenInRoom");
+	AGS_ProcessClick = (_AGS_PROCESSCLICK)engine->GetScriptFunctionAddress("ProcessClick");
+	AGS_AbortGame = (_AGS_ABORTGAME)engine->GetScriptFunctionAddress("AbortGame");
+	AGS_QuitGame = (_AGS_QUITGAME)engine->GetScriptFunctionAddress("QuitGame");
+	AGS_SetGameSpeed = (_AGS_SETGAMESPEED)engine->GetScriptFunctionAddress("SetGameSpeed");
+	AGS_GetGameSpeed = (_AGS_GETGAMESPEED)engine->GetScriptFunctionAddress("GetGameSpeed");
+	AGS_SetGameOption = (_AGS_SETGAMEOPTION)engine->GetScriptFunctionAddress("SetGameOption");
+	AGS_GetGameOption = (_AGS_GETGAMEOPTION)engine->GetScriptFunctionAddress("GetGameOption");
+	AGS_Debug = (_AGS_DEBUG)engine->GetScriptFunctionAddress("Debug");
+	AGS_CallRoomScript = (_AGS_CALLROOMSCRIPT)engine->GetScriptFunctionAddress("CallRoomScript");
+	AGS_RunAGSGame = (_AGS_RUNAGSGAME)engine->GetScriptFunctionAddress("RunAGSGame");
+	AGS_GetTranslation = (_AGS_GETTRANSLATION)engine->GetScriptFunctionAddress("GetTranslation");
+	AGS_IsTranslationAvailable = (_AGS_ISTRANSLATIONAVAILABLE)engine->GetScriptFunctionAddress("IsTranslationAvailable");
+	AGS_RestoreGameDialog = (_AGS_RESTOREGAMEDIALOG)engine->GetScriptFunctionAddress("RestoreGameDialog");
+	AGS_SaveGameDialog = (_AGS_SAVEGAMEDIALOG)engine->GetScriptFunctionAddress("SaveGameDialog");
+	AGS_RestartGame = (_AGS_RESTARTGAME)engine->GetScriptFunctionAddress("RestartGame");
+	AGS_SaveGameSlot = (_AGS_SAVEGAMESLOT)engine->GetScriptFunctionAddress("SaveGameSlot");
+	AGS_RestoreGameSlot = (_AGS_RESTOREGAMESLOT)engine->GetScriptFunctionAddress("RestoreGameSlot");
+	AGS_DeleteSaveSlot = (_AGS_DELETESAVESLOT)engine->GetScriptFunctionAddress("DeleteSaveSlot");
+	AGS_SetRestartPoint = (_AGS_SETRESTARTPOINT)engine->GetScriptFunctionAddress("SetRestartPoint");
+	AGS_GetLocationType = (_AGS_GETLOCATIONTYPE)engine->GetScriptFunctionAddress("GetLocationType");
+	AGS_GetWalkableAreaAt = (_AGS_GETWALKABLEAREAAT)engine->GetScriptFunctionAddress("GetWalkableAreaAt");
+	AGS_GetScalingAt = (_AGS_GETSCALINGAT)engine->GetScriptFunctionAddress("GetScalingAt");
+	AGS_GetRoomProperty = (_AGS_GETROOMPROPERTY)engine->GetScriptFunctionAddress("GetRoomProperty");
+	AGS_SetViewport = (_AGS_SETVIEWPORT)engine->GetScriptFunctionAddress("SetViewport");
+	AGS_ReleaseViewport = (_AGS_RELEASEVIEWPORT)engine->GetScriptFunctionAddress("ReleaseViewport");
+	AGS_GetViewportX = (_AGS_GETVIEWPORTX)engine->GetScriptFunctionAddress("GetViewportX");
+	AGS_GetViewportY = (_AGS_GETVIEWPORTY)engine->GetScriptFunctionAddress("GetViewportY");
+	AGS_IsGamePaused = (_AGS_ISGAMEPAUSED)engine->GetScriptFunctionAddress("IsGamePaused");
+	AGS_GetGraphicalVariable = (_AGS_GETGRAPHICALVARIABLE)engine->GetScriptFunctionAddress("GetGraphicalVariable");
+	AGS_SetGraphicalVariable = (_AGS_SETGRAPHICALVARIABLE)engine->GetScriptFunctionAddress("SetGraphicalVariable");
+	AGS_DisableInterface = (_AGS_DISABLEINTERFACE)engine->GetScriptFunctionAddress("DisableInterface");
+	AGS_EnableInterface = (_AGS_ENABLEINTERFACE)engine->GetScriptFunctionAddress("EnableInterface");
+	AGS_IsInterfaceEnabled = (_AGS_ISINTERFACEENABLED)engine->GetScriptFunctionAddress("IsInterfaceEnabled");
+	AGS_Said = (_AGS_SAID)engine->GetScriptFunctionAddress("Said");
+	AGS_GetTextWidth = (_AGS_GETTEXTWIDTH)engine->GetScriptFunctionAddress("GetTextWidth");
+	AGS_GetTextHeight = (_AGS_GETTEXTHEIGHT)engine->GetScriptFunctionAddress("GetTextHeight");
+	AGS_GiveScore = (_AGS_GIVESCORE)engine->GetScriptFunctionAddress("GiveScore");
+	AGS_UpdateInventory = (_AGS_UPDATEINVENTORY)engine->GetScriptFunctionAddress("UpdateInventory");
+	AGS_StopDialog = (_AGS_STOPDIALOG)engine->GetScriptFunctionAddress("StopDialog");
+	AGS_AreThingsOverlapping = (_AGS_ARETHINGSOVERLAPPING)engine->GetScriptFunctionAddress("AreThingsOverlapping");
+	AGS_SetVoiceMode = (_AGS_SETVOICEMODE)engine->GetScriptFunctionAddress("SetVoiceMode");
+	AGS_SetSkipSpeech = (_AGS_SETSKIPSPEECH)engine->GetScriptFunctionAddress("SetSkipSpeech");
+	AGS_SetSpeechStyle = (_AGS_SETSPEECHSTYLE)engine->GetScriptFunctionAddress("SetSpeechStyle");
+	AGS_SetTimer = (_AGS_SETTIMER)engine->GetScriptFunctionAddress("SetTimer");
+	AGS_IsTimerExpired = (_AGS_ISTIMEREXPIRED)engine->GetScriptFunctionAddress("IsTimerExpired");
+	AGS_SetMultitaskingMode = (_AGS_SETMULTITASKINGMODE)engine->GetScriptFunctionAddress("SetMultitaskingMode");
+	AGS_FloatToInt = (_AGS_FLOATTOINT)engine->GetScriptFunctionAddress("FloatToInt");
+	AGS_IntToFloat = (_AGS_INTTOFLOAT)engine->GetScriptFunctionAddress("IntToFloat");
+	AGS_FadeIn = (_AGS_FADEIN)engine->GetScriptFunctionAddress("FadeIn");
+	AGS_FadeOut = (_AGS_FADEOUT)engine->GetScriptFunctionAddress("FadeOut");
+	AGS_CyclePalette = (_AGS_CYCLEPALETTE)engine->GetScriptFunctionAddress("CyclePalette");
+	AGS_SetPalRGB = (_AGS_SETPALRGB)engine->GetScriptFunctionAddress("SetPalRGB");
+	AGS_UpdatePalette = (_AGS_UPDATEPALETTE)engine->GetScriptFunctionAddress("UpdatePalette");
+	AGS_TintScreen = (_AGS_TINTSCREEN)engine->GetScriptFunctionAddress("TintScreen");
+	AGS_SetAmbientTint = (_AGS_SETAMBIENTTINT)engine->GetScriptFunctionAddress("SetAmbientTint");
+	AGS_Random = (_AGS_RANDOM)engine->GetScriptFunctionAddress("Random");
+	AGS_SetBackgroundFrame = (_AGS_SETBACKGROUNDFRAME)engine->GetScriptFunctionAddress("SetBackgroundFrame");
+	AGS_GetBackgroundFrame = (_AGS_GETBACKGROUNDFRAME)engine->GetScriptFunctionAddress("GetBackgroundFrame");
+	AGS_ShakeScreen = (_AGS_SHAKESCREEN)engine->GetScriptFunctionAddress("ShakeScreen");
+	AGS_ShakeScreenBackground = (_AGS_SHAKESCREENBACKGROUND)engine->GetScriptFunctionAddress("ShakeScreenBackground");
+	AGS_SetScreenTransition = (_AGS_SETSCREENTRANSITION)engine->GetScriptFunctionAddress("SetScreenTransition");
+	AGS_SetNextScreenTransition = (_AGS_SETNEXTSCREENTRANSITION)engine->GetScriptFunctionAddress("SetNextScreenTransition");
+	AGS_SetFadeColor = (_AGS_SETFADECOLOR)engine->GetScriptFunctionAddress("SetFadeColor");
+	AGS_IsInteractionAvailable = (_AGS_ISINTERACTIONAVAILABLE)engine->GetScriptFunctionAddress("IsInteractionAvailable");
+	AGS_RemoveWalkableArea = (_AGS_REMOVEWALKABLEAREA)engine->GetScriptFunctionAddress("RemoveWalkableArea");
+	AGS_RestoreWalkableArea = (_AGS_RESTOREWALKABLEAREA)engine->GetScriptFunctionAddress("RestoreWalkableArea");
+	AGS_SetAreaScaling = (_AGS_SETAREASCALING)engine->GetScriptFunctionAddress("SetAreaScaling");
+	AGS_DisableGroundLevelAreas = (_AGS_DISABLEGROUNDLEVELAREAS)engine->GetScriptFunctionAddress("DisableGroundLevelAreas");
+	AGS_EnableGroundLevelAreas = (_AGS_ENABLEGROUNDLEVELAREAS)engine->GetScriptFunctionAddress("EnableGroundLevelAreas");
+	AGS_SetWalkBehindBase = (_AGS_SETWALKBEHINDBASE)engine->GetScriptFunctionAddress("SetWalkBehindBase");
+	AGS_CDAudio = (_AGS_CDAUDIO)engine->GetScriptFunctionAddress("CDAudio");
+	AGS_PlayFlic = (_AGS_PLAYFLIC)engine->GetScriptFunctionAddress("PlayFlic");
+	AGS_PlayVideo = (_AGS_PLAYVIDEO)engine->GetScriptFunctionAddress("PlayVideo");
+	AGS_PlayMusic = (_AGS_PLAYMUSIC)engine->GetScriptFunctionAddress("PlayMusic");
+	AGS_PlayMusicQueued = (_AGS_PLAYMUSICQUEUED)engine->GetScriptFunctionAddress("PlayMusicQueued");
+	AGS_PlaySilentMIDI = (_AGS_PLAYSILENTMIDI)engine->GetScriptFunctionAddress("PlaySilentMIDI");
+	AGS_PlayMP3File = (_AGS_PLAYMP3FILE)engine->GetScriptFunctionAddress("PlayMP3File");
+	AGS_PlaySound = (_AGS_PLAYSOUND)engine->GetScriptFunctionAddress("PlaySound");
+	AGS_PlaySoundEx = (_AGS_PLAYSOUNDEX)engine->GetScriptFunctionAddress("PlaySoundEx");
+	AGS_PlayAmbientSound = (_AGS_PLAYAMBIENTSOUND)engine->GetScriptFunctionAddress("PlayAmbientSound");
+	AGS_StopAmbientSound = (_AGS_STOPAMBIENTSOUND)engine->GetScriptFunctionAddress("StopAmbientSound");
+	AGS_GetCurrentMusic = (_AGS_GETCURRENTMUSIC)engine->GetScriptFunctionAddress("GetCurrentMusic");
+	AGS_SetMusicRepeat = (_AGS_SETMUSICREPEAT)engine->GetScriptFunctionAddress("SetMusicRepeat");
+	AGS_SetMusicVolume = (_AGS_SETMUSICVOLUME)engine->GetScriptFunctionAddress("SetMusicVolume");
+	AGS_SetSoundVolume = (_AGS_SETSOUNDVOLUME)engine->GetScriptFunctionAddress("SetSoundVolume");
+	AGS_SetMusicMasterVolume = (_AGS_SETMUSICMASTERVOLUME)engine->GetScriptFunctionAddress("SetMusicMasterVolume");
+	AGS_SetDigitalMasterVolume = (_AGS_SETDIGITALMASTERVOLUME)engine->GetScriptFunctionAddress("SetDigitalMasterVolume");
+	AGS_SeekMODPattern = (_AGS_SEEKMODPATTERN)engine->GetScriptFunctionAddress("SeekMODPattern");
+	AGS_IsChannelPlaying = (_AGS_ISCHANNELPLAYING)engine->GetScriptFunctionAddress("IsChannelPlaying");
+	AGS_IsSoundPlaying = (_AGS_ISSOUNDPLAYING)engine->GetScriptFunctionAddress("IsSoundPlaying");
+	AGS_IsMusicPlaying = (_AGS_ISMUSICPLAYING)engine->GetScriptFunctionAddress("IsMusicPlaying");
+	AGS_GetMIDIPosition = (_AGS_GETMIDIPOSITION)engine->GetScriptFunctionAddress("GetMIDIPosition");
+	AGS_SeekMIDIPosition = (_AGS_SEEKMIDIPOSITION)engine->GetScriptFunctionAddress("SeekMIDIPosition");
+	AGS_GetMP3PosMillis = (_AGS_GETMP3POSMILLIS)engine->GetScriptFunctionAddress("GetMP3PosMillis");
+	AGS_SeekMP3PosMillis = (_AGS_SEEKMP3POSMILLIS)engine->GetScriptFunctionAddress("SeekMP3PosMillis");
+	AGS_SetChannelVolume = (_AGS_SETCHANNELVOLUME)engine->GetScriptFunctionAddress("SetChannelVolume");
+	AGS_StopChannel = (_AGS_STOPCHANNEL)engine->GetScriptFunctionAddress("StopChannel");
+	AGS_StopMusic = (_AGS_STOPMUSIC)engine->GetScriptFunctionAddress("StopMusic");
+	AGS_IsVoxAvailable = (_AGS_ISVOXAVAILABLE)engine->GetScriptFunctionAddress("IsVoxAvailable");
+	AGS_SetSpeechVolume = (_AGS_SETSPEECHVOLUME)engine->GetScriptFunctionAddress("SetSpeechVolume");
+	AGS_IsMusicVoxAvailable = (_AGS_ISMUSICVOXAVAILABLE)engine->GetScriptFunctionAddress("IsMusicVoxAvailable");
+	AGS_SaveScreenShot = (_AGS_SAVESCREENSHOT)engine->GetScriptFunctionAddress("SaveScreenShot");
+	AGS_PauseGame = (_AGS_PAUSEGAME)engine->GetScriptFunctionAddress("PauseGame");
+	AGS_UnPauseGame = (_AGS_UNPAUSEGAME)engine->GetScriptFunctionAddress("UnPauseGame");
+	AGS_Wait = (_AGS_WAIT)engine->GetScriptFunctionAddress("Wait");
+	AGS_WaitKey = (_AGS_WAITKEY)engine->GetScriptFunctionAddress("WaitKey");
+	AGS_WaitMouseKey = (_AGS_WAITMOUSEKEY)engine->GetScriptFunctionAddress("WaitMouseKey");
+	AGS_IsKeyPressed = (_AGS_ISKEYPRESSED)engine->GetScriptFunctionAddress("IsKeyPressed");
+	AGS_SetGlobalInt = (_AGS_SETGLOBALINT)engine->GetScriptFunctionAddress("SetGlobalInt");
+	AGS_GetGlobalInt = (_AGS_GETGLOBALINT)engine->GetScriptFunctionAddress("GetGlobalInt");
+	AGS_FlipScreen = (_AGS_FLIPSCREEN)engine->GetScriptFunctionAddress("FlipScreen");
+	AGS_SkipUntilCharacterStops = (_AGS_SKIPUNTILCHARACTERSTOPS)engine->GetScriptFunctionAddress("SkipUntilCharacterStops");
+	AGS_StartCutscene = (_AGS_STARTCUTSCENE)engine->GetScriptFunctionAddress("StartCutscene");
+	AGS_EndCutscene = (_AGS_ENDCUTSCENE)engine->GetScriptFunctionAddress("EndCutscene");
+	AGS_ClaimEvent = (_AGS_CLAIMEVENT)engine->GetScriptFunctionAddress("ClaimEvent");
+	AGS_SetTextWindowGUI = (_AGS_SETTEXTWINDOWGUI)engine->GetScriptFunctionAddress("SetTextWindowGUI");
+	AGS_FindGUIID = (_AGS_FINDGUIID)engine->GetScriptFunctionAddress("FindGUIID");
+	
+	// ViewFrame methods
+	AGS_ViewFrame_get_Flipped = (_AGS_VIEWFRAME_GET_FLIPPED)engine->GetScriptFunctionAddress("ViewFrame::get_Flipped");
+	AGS_ViewFrame_get_Frame = (_AGS_VIEWFRAME_GET_FRAME)engine->GetScriptFunctionAddress("ViewFrame::get_Frame");
+	AGS_ViewFrame_get_Graphic = (_AGS_VIEWFRAME_GET_GRAPHIC)engine->GetScriptFunctionAddress("ViewFrame::get_Graphic");
+	AGS_ViewFrame_set_Graphic = (_AGS_VIEWFRAME_SET_GRAPHIC)engine->GetScriptFunctionAddress("ViewFrame::set_Graphic");
+	AGS_ViewFrame_get_LinkedAudio = (_AGS_VIEWFRAME_GET_LINKEDAUDIO)engine->GetScriptFunctionAddress("ViewFrame::get_LinkedAudio");
+	AGS_ViewFrame_set_LinkedAudio = (_AGS_VIEWFRAME_SET_LINKEDAUDIO)engine->GetScriptFunctionAddress("ViewFrame::set_LinkedAudio");
+	AGS_ViewFrame_get_Loop = (_AGS_VIEWFRAME_GET_LOOP)engine->GetScriptFunctionAddress("ViewFrame::get_Loop");
+	AGS_ViewFrame_get_Sound = (_AGS_VIEWFRAME_GET_SOUND)engine->GetScriptFunctionAddress("ViewFrame::get_Sound");
+	AGS_ViewFrame_set_Sound = (_AGS_VIEWFRAME_SET_SOUND)engine->GetScriptFunctionAddress("ViewFrame::set_Sound");
+	AGS_ViewFrame_get_Speed = (_AGS_VIEWFRAME_GET_SPEED)engine->GetScriptFunctionAddress("ViewFrame::get_Speed");
+	AGS_ViewFrame_get_View = (_AGS_VIEWFRAME_GET_VIEW)engine->GetScriptFunctionAddress("ViewFrame::get_View");
+	
+	// DrawingSurface methods
+	AGS_DrawingSurface_Clear = (_AGS_DRAWINGSURFACE_CLEAR)engine->GetScriptFunctionAddress("DrawingSurface::Clear^1");
+	AGS_DrawingSurface_CreateCopy = (_AGS_DRAWINGSURFACE_CREATECOPY)engine->GetScriptFunctionAddress("DrawingSurface::CreateCopy^0");
+	AGS_DrawingSurface_DrawCircle = (_AGS_DRAWINGSURFACE_DRAWCIRCLE)engine->GetScriptFunctionAddress("DrawingSurface::DrawCircle^3");
+	AGS_DrawingSurface_DrawImage = (_AGS_DRAWINGSURFACE_DRAWIMAGE)engine->GetScriptFunctionAddress("DrawingSurface::DrawImage^6");
+	AGS_DrawingSurface_DrawLine = (_AGS_DRAWINGSURFACE_DRAWLINE)engine->GetScriptFunctionAddress("DrawingSurface::DrawLine^5");
+	AGS_DrawingSurface_DrawMessageWrapped = (_AGS_DRAWINGSURFACE_DRAWMESSAGEWRAPPED)engine->GetScriptFunctionAddress("DrawingSurface::DrawMessageWrapped^5");
+	AGS_DrawingSurface_DrawPixel = (_AGS_DRAWINGSURFACE_DRAWPIXEL)engine->GetScriptFunctionAddress("DrawingSurface::DrawPixel^2");
+	AGS_DrawingSurface_DrawRectangle = (_AGS_DRAWINGSURFACE_DRAWRECTANGLE)engine->GetScriptFunctionAddress("DrawingSurface::DrawRectangle^4");
+	AGS_DrawingSurface_DrawString = (_AGS_DRAWINGSURFACE_DRAWSTRING)engine->GetScriptFunctionAddress("DrawingSurface::DrawString^104");
+	AGS_DrawingSurface_DrawStringWrapped = (_AGS_DRAWINGSURFACE_DRAWSTRINGWRAPPED)engine->GetScriptFunctionAddress("DrawingSurface::DrawStringWrapped^6");
+	AGS_DrawingSurface_DrawSurface = (_AGS_DRAWINGSURFACE_DRAWSURFACE)engine->GetScriptFunctionAddress("DrawingSurface::DrawSurface^2");
+	AGS_DrawingSurface_DrawTriangle = (_AGS_DRAWINGSURFACE_DRAWTRIANGLE)engine->GetScriptFunctionAddress("DrawingSurface::DrawTriangle^6");
+	AGS_DrawingSurface_GetPixel = (_AGS_DRAWINGSURFACE_GETPIXEL)engine->GetScriptFunctionAddress("DrawingSurface::GetPixel^2");
+	AGS_DrawingSurface_Release = (_AGS_DRAWINGSURFACE_RELEASE)engine->GetScriptFunctionAddress("DrawingSurface::Release^0");
+	AGS_DrawingSurface_get_DrawingColor = (_AGS_DRAWINGSURFACE_GET_DRAWINGCOLOR)engine->GetScriptFunctionAddress("DrawingSurface::get_DrawingColor");
+	AGS_DrawingSurface_set_DrawingColor = (_AGS_DRAWINGSURFACE_SET_DRAWINGCOLOR)engine->GetScriptFunctionAddress("DrawingSurface::set_DrawingColor");
+	AGS_DrawingSurface_get_Height = (_AGS_DRAWINGSURFACE_GET_HEIGHT)engine->GetScriptFunctionAddress("DrawingSurface::get_Height");
+	AGS_DrawingSurface_get_UseHighResCoordinates = (_AGS_DRAWINGSURFACE_GET_USEHIGHRESCOORDINATES)engine->GetScriptFunctionAddress("DrawingSurface::get_UseHighResCoordinates");
+	AGS_DrawingSurface_set_UseHighResCoordinates = (_AGS_DRAWINGSURFACE_SET_USEHIGHRESCOORDINATES)engine->GetScriptFunctionAddress("DrawingSurface::set_UseHighResCoordinates");
+	AGS_DrawingSurface_get_Width = (_AGS_DRAWINGSURFACE_GET_WIDTH)engine->GetScriptFunctionAddress("DrawingSurface::get_Width");
+	
+	// Room methods
+	AGS_Room_GetTextProperty = (_AGS_ROOM_GETTEXTPROPERTY)engine->GetScriptFunctionAddress("Room::GetTextProperty^1");
+	AGS_Room_GetDrawingSurfaceForBackground = (_AGS_ROOM_GETDRAWINGSURFACEFORBACKGROUND)engine->GetScriptFunctionAddress("Room::GetDrawingSurfaceForBackground^1");
+	AGS_Room_get_BottomEdge = (_AGS_ROOM_GET_BOTTOMEDGE)engine->GetScriptFunctionAddress("Room::get_BottomEdge");
+	AGS_Room_get_ColorDepth = (_AGS_ROOM_GET_COLORDEPTH)engine->GetScriptFunctionAddress("Room::get_ColorDepth");
+	AGS_Room_get_Height = (_AGS_ROOM_GET_HEIGHT)engine->GetScriptFunctionAddress("Room::get_Height");
+	AGS_Room_get_LeftEdge = (_AGS_ROOM_GET_LEFTEDGE)engine->GetScriptFunctionAddress("Room::get_LeftEdge");
+	AGS_Room_geti_Messages = (_AGS_ROOM_GETI_MESSAGES)engine->GetScriptFunctionAddress("Room::geti_Messages");
+	AGS_Room_get_MusicOnLoad = (_AGS_ROOM_GET_MUSICONLOAD)engine->GetScriptFunctionAddress("Room::get_MusicOnLoad");
+	AGS_Room_get_ObjectCount = (_AGS_ROOM_GET_OBJECTCOUNT)engine->GetScriptFunctionAddress("Room::get_ObjectCount");
+	AGS_Room_get_RightEdge = (_AGS_ROOM_GET_RIGHTEDGE)engine->GetScriptFunctionAddress("Room::get_RightEdge");
+	AGS_Room_get_TopEdge = (_AGS_ROOM_GET_TOPEDGE)engine->GetScriptFunctionAddress("Room::get_TopEdge");
+	AGS_Room_get_Width = (_AGS_ROOM_GET_WIDTH)engine->GetScriptFunctionAddress("Room::get_Width");
+	
+	// Game methods
+	AGS_Game_ChangeTranslation = (_AGS_GAME_CHANGETRANSLATION)engine->GetScriptFunctionAddress("Game::ChangeTranslation^1");
+	AGS_Game_DoOnceOnly = (_AGS_GAME_DOONCEONLY)engine->GetScriptFunctionAddress("Game::DoOnceOnly^1");
+	AGS_Game_GetColorFromRGB = (_AGS_GAME_GETCOLORFROMRGB)engine->GetScriptFunctionAddress("Game::GetColorFromRGB^3");
+	AGS_Game_GetFrameCountForLoop = (_AGS_GAME_GETFRAMECOUNTFORLOOP)engine->GetScriptFunctionAddress("Game::GetFrameCountForLoop^2");
+	AGS_Game_GetLocationName = (_AGS_GAME_GETLOCATIONNAME)engine->GetScriptFunctionAddress("Game::GetLocationName^2");
+	AGS_Game_GetLoopCountForView = (_AGS_GAME_GETLOOPCOUNTFORVIEW)engine->GetScriptFunctionAddress("Game::GetLoopCountForView^1");
+	AGS_Game_GetMODPattern = (_AGS_GAME_GETMODPATTERN)engine->GetScriptFunctionAddress("Game::GetMODPattern^0");
+	AGS_Game_GetRunNextSettingForLoop = (_AGS_GAME_GETRUNNEXTSETTINGFORLOOP)engine->GetScriptFunctionAddress("Game::GetRunNextSettingForLoop^2");
+	AGS_Game_GetSaveSlotDescription = (_AGS_GAME_GETSAVESLOTDESCRIPTION)engine->GetScriptFunctionAddress("Game::GetSaveSlotDescription^1");
+	AGS_Game_GetViewFrame = (_AGS_GAME_GETVIEWFRAME)engine->GetScriptFunctionAddress("Game::GetViewFrame^3");
+	AGS_Game_InputBox = (_AGS_GAME_INPUTBOX)engine->GetScriptFunctionAddress("Game::InputBox^1");
+	AGS_Game_IsAudioPlaying = (_AGS_GAME_ISAUDIOPLAYING)engine->GetScriptFunctionAddress("Game::IsAudioPlaying^1");
+	AGS_Game_SetSaveGameDirectory = (_AGS_GAME_SETSAVEGAMEDIRECTORY)engine->GetScriptFunctionAddress("Game::SetSaveGameDirectory^1");
+	AGS_Game_StopAudio = (_AGS_GAME_STOPAUDIO)engine->GetScriptFunctionAddress("Game::StopAudio^1");
+	AGS_Game_StopSound = (_AGS_GAME_STOPSOUND)engine->GetScriptFunctionAddress("Game::StopSound^1");
+	AGS_Game_get_CharacterCount = (_AGS_GAME_GET_CHARACTERCOUNT)engine->GetScriptFunctionAddress("Game::get_CharacterCount");
+	AGS_Game_get_DialogCount = (_AGS_GAME_GET_DIALOGCOUNT)engine->GetScriptFunctionAddress("Game::get_DialogCount");
+	AGS_Game_get_FileName = (_AGS_GAME_GET_FILENAME)engine->GetScriptFunctionAddress("Game::get_FileName");
+	AGS_Game_get_FontCount = (_AGS_GAME_GET_FONTCOUNT)engine->GetScriptFunctionAddress("Game::get_FontCount");
+	AGS_Game_geti_GlobalMessages = (_AGS_GAME_GETI_GLOBALMESSAGES)engine->GetScriptFunctionAddress("Game::geti_GlobalMessages");
+	AGS_Game_geti_GlobalStrings = (_AGS_GAME_GETI_GLOBALSTRINGS)engine->GetScriptFunctionAddress("Game::geti_GlobalStrings");
+	AGS_Game_seti_GlobalStrings = (_AGS_GAME_SETI_GLOBALSTRINGS)engine->GetScriptFunctionAddress("Game::seti_GlobalStrings");
+	AGS_Game_get_GUICount = (_AGS_GAME_GET_GUICOUNT)engine->GetScriptFunctionAddress("Game::get_GUICount");
+	AGS_Game_get_IgnoreUserInputAfterTextTimeoutMs = (_AGS_GAME_GET_IGNOREUSERINPUTAFTERTEXTTIMEOUTMS)engine->GetScriptFunctionAddress("Game::get_IgnoreUserInputAfterTextTimeoutMs");
+	AGS_Game_set_IgnoreUserInputAfterTextTimeoutMs = (_AGS_GAME_SET_IGNOREUSERINPUTAFTERTEXTTIMEOUTMS)engine->GetScriptFunctionAddress("Game::set_IgnoreUserInputAfterTextTimeoutMs");
+	AGS_Game_get_InSkippableCutscene = (_AGS_GAME_GET_INSKIPPABLECUTSCENE)engine->GetScriptFunctionAddress("Game::get_InSkippableCutscene");
+	AGS_Game_get_InventoryItemCount = (_AGS_GAME_GET_INVENTORYITEMCOUNT)engine->GetScriptFunctionAddress("Game::get_InventoryItemCount");
+	AGS_Game_get_MinimumTextDisplayTimeMs = (_AGS_GAME_GET_MINIMUMTEXTDISPLAYTIMEMS)engine->GetScriptFunctionAddress("Game::get_MinimumTextDisplayTimeMs");
+	AGS_Game_set_MinimumTextDisplayTimeMs = (_AGS_GAME_SET_MINIMUMTEXTDISPLAYTIMEMS)engine->GetScriptFunctionAddress("Game::set_MinimumTextDisplayTimeMs");
+	AGS_Game_get_MouseCursorCount = (_AGS_GAME_GET_MOUSECURSORCOUNT)engine->GetScriptFunctionAddress("Game::get_MouseCursorCount");
+	AGS_Game_get_Name = (_AGS_GAME_GET_NAME)engine->GetScriptFunctionAddress("Game::get_Name");
+	AGS_Game_set_Name = (_AGS_GAME_SET_NAME)engine->GetScriptFunctionAddress("Game::set_Name");
+	AGS_Game_get_NormalFont = (_AGS_GAME_GET_NORMALFONT)engine->GetScriptFunctionAddress("Game::get_NormalFont");
+	AGS_Game_set_NormalFont = (_AGS_GAME_SET_NORMALFONT)engine->GetScriptFunctionAddress("Game::set_NormalFont");
+	AGS_Game_get_SkippingCutscene = (_AGS_GAME_GET_SKIPPINGCUTSCENE)engine->GetScriptFunctionAddress("Game::get_SkippingCutscene");
+	AGS_Game_get_SpeechFont = (_AGS_GAME_GET_SPEECHFONT)engine->GetScriptFunctionAddress("Game::get_SpeechFont");
+	AGS_Game_set_SpeechFont = (_AGS_GAME_SET_SPEECHFONT)engine->GetScriptFunctionAddress("Game::set_SpeechFont");
+	AGS_Game_geti_SpriteHeight = (_AGS_GAME_GETI_SPRITEHEIGHT)engine->GetScriptFunctionAddress("Game::geti_SpriteHeight");
+	AGS_Game_geti_SpriteWidth = (_AGS_GAME_GETI_SPRITEWIDTH)engine->GetScriptFunctionAddress("Game::geti_SpriteWidth");
+	AGS_Game_get_TextReadingSpeed = (_AGS_GAME_GET_TEXTREADINGSPEED)engine->GetScriptFunctionAddress("Game::get_TextReadingSpeed");
+	AGS_Game_set_TextReadingSpeed = (_AGS_GAME_SET_TEXTREADINGSPEED)engine->GetScriptFunctionAddress("Game::set_TextReadingSpeed");
+	AGS_Game_get_TranslationFilename = (_AGS_GAME_GET_TRANSLATIONFILENAME)engine->GetScriptFunctionAddress("Game::get_TranslationFilename");
+	AGS_Game_get_UseNativeCoordinates = (_AGS_GAME_GET_USENATIVECOORDINATES)engine->GetScriptFunctionAddress("Game::get_UseNativeCoordinates");
+	AGS_Game_get_ViewCount = (_AGS_GAME_GET_VIEWCOUNT)engine->GetScriptFunctionAddress("Game::get_ViewCount");
+	
+	// Parser methods
+	AGS_Parser_FindWordID = (_AGS_PARSER_FINDWORDID)engine->GetScriptFunctionAddress("Parser::FindWordID^1");
+	AGS_Parser_ParseText = (_AGS_PARSER_PARSETEXT)engine->GetScriptFunctionAddress("Parser::ParseText^1");
+	AGS_Parser_Said = (_AGS_PARSER_SAID)engine->GetScriptFunctionAddress("Parser::Said^1");
+	AGS_Parser_SaidUnknownWord = (_AGS_PARSER_SAIDUNKNOWNWORD)engine->GetScriptFunctionAddress("Parser::SaidUnknownWord^0");
+	
+	// Mouse methods
+	AGS_Mouse_ChangeModeGraphic = (_AGS_MOUSE_CHANGEMODEGRAPHIC)engine->GetScriptFunctionAddress("Mouse::ChangeModeGraphic^2");
+	AGS_Mouse_ChangeModeHotspot = (_AGS_MOUSE_CHANGEMODEHOTSPOT)engine->GetScriptFunctionAddress("Mouse::ChangeModeHotspot^3");
+	AGS_Mouse_ChangeModeView = (_AGS_MOUSE_CHANGEMODEVIEW)engine->GetScriptFunctionAddress("Mouse::ChangeModeView^2");
+	AGS_Mouse_DisableMode = (_AGS_MOUSE_DISABLEMODE)engine->GetScriptFunctionAddress("Mouse::DisableMode^1");
+	AGS_Mouse_EnableMode = (_AGS_MOUSE_ENABLEMODE)engine->GetScriptFunctionAddress("Mouse::EnableMode^1");
+	AGS_Mouse_GetModeGraphic = (_AGS_MOUSE_GETMODEGRAPHIC)engine->GetScriptFunctionAddress("Mouse::GetModeGraphic^1");
+	AGS_Mouse_IsButtonDown = (_AGS_MOUSE_ISBUTTONDOWN)engine->GetScriptFunctionAddress("Mouse::IsButtonDown^1");
+	AGS_Mouse_SaveCursorUntilItLeaves = (_AGS_MOUSE_SAVECURSORUNTILITLEAVES)engine->GetScriptFunctionAddress("Mouse::SaveCursorUntilItLeaves^0");
+	AGS_Mouse_SelectNextMode = (_AGS_MOUSE_SELECTNEXTMODE)engine->GetScriptFunctionAddress("Mouse::SelectNextMode^0");
+	AGS_Mouse_SetBounds = (_AGS_MOUSE_SETBOUNDS)engine->GetScriptFunctionAddress("Mouse::SetBounds^4");
+	AGS_Mouse_SetPosition = (_AGS_MOUSE_SETPOSITION)engine->GetScriptFunctionAddress("Mouse::SetPosition^2");
+	AGS_Mouse_Update = (_AGS_MOUSE_UPDATE)engine->GetScriptFunctionAddress("Mouse::Update^0");
+	AGS_Mouse_UseDefaultGraphic = (_AGS_MOUSE_USEDEFAULTGRAPHIC)engine->GetScriptFunctionAddress("Mouse::UseDefaultGraphic^0");
+	AGS_Mouse_UseModeGraphic = (_AGS_MOUSE_USEMODEGRAPHIC)engine->GetScriptFunctionAddress("Mouse::UseModeGraphic^1");
+	AGS_Mouse_get_Mode = (_AGS_MOUSE_GET_MODE)engine->GetScriptFunctionAddress("Mouse::get_Mode");
+	AGS_Mouse_set_Mode = (_AGS_MOUSE_SET_MODE)engine->GetScriptFunctionAddress("Mouse::set_Mode");
+	AGS_Mouse_get_Visible = (_AGS_MOUSE_GET_VISIBLE)engine->GetScriptFunctionAddress("Mouse::get_Visible");
+	AGS_Mouse_set_Visible = (_AGS_MOUSE_SET_VISIBLE)engine->GetScriptFunctionAddress("Mouse::set_Visible");
+	
+	// File methods
+	AGS_File_Delete = (_AGS_FILE_DELETE)engine->GetScriptFunctionAddress("File::Delete^1");
+	AGS_File_Exists = (_AGS_FILE_EXISTS)engine->GetScriptFunctionAddress("File::Exists^1");
+	AGS_File_Open = (_AGS_FILE_OPEN)engine->GetScriptFunctionAddress("File::Open^2");
+	AGS_File_Close = (_AGS_FILE_CLOSE)engine->GetScriptFunctionAddress("File::Close^0");
+	AGS_File_ReadInt = (_AGS_FILE_READINT)engine->GetScriptFunctionAddress("File::ReadInt^0");
+	AGS_File_ReadRawChar = (_AGS_FILE_READRAWCHAR)engine->GetScriptFunctionAddress("File::ReadRawChar^0");
+	AGS_File_ReadRawInt = (_AGS_FILE_READRAWINT)engine->GetScriptFunctionAddress("File::ReadRawInt^0");
+	AGS_File_ReadRawLineBack = (_AGS_FILE_READRAWLINEBACK)engine->GetScriptFunctionAddress("File::ReadRawLineBack^0");
+	AGS_File_ReadStringBack = (_AGS_FILE_READSTRINGBACK)engine->GetScriptFunctionAddress("File::ReadStringBack^0");
+	AGS_File_WriteInt = (_AGS_FILE_WRITEINT)engine->GetScriptFunctionAddress("File::WriteInt^1");
+	AGS_File_WriteRawChar = (_AGS_FILE_WRITERAWCHAR)engine->GetScriptFunctionAddress("File::WriteRawChar^1");
+	AGS_File_WriteRawLine = (_AGS_FILE_WRITERAWLINE)engine->GetScriptFunctionAddress("File::WriteRawLine^1");
+	AGS_File_WriteString = (_AGS_FILE_WRITESTRING)engine->GetScriptFunctionAddress("File::WriteString^1");
+	AGS_File_get_EOF = (_AGS_FILE_GET_EOF)engine->GetScriptFunctionAddress("File::get_EOF");
+	AGS_File_get_Error = (_AGS_FILE_GET_ERROR)engine->GetScriptFunctionAddress("File::get_Error");
+	
+	// InventoryItem methods
+	AGS_InventoryItem_GetAtScreenXY = (_AGS_INVENTORYITEM_GETATSCREENXY)engine->GetScriptFunctionAddress("InventoryItem::GetAtScreenXY^2");
+	AGS_InventoryItem_GetProperty = (_AGS_INVENTORYITEM_GETPROPERTY)engine->GetScriptFunctionAddress("InventoryItem::GetProperty^1");
+	AGS_InventoryItem_GetTextProperty = (_AGS_INVENTORYITEM_GETTEXTPROPERTY)engine->GetScriptFunctionAddress("InventoryItem::GetTextProperty^1");
+	AGS_InventoryItem_IsInteractionAvailable = (_AGS_INVENTORYITEM_ISINTERACTIONAVAILABLE)engine->GetScriptFunctionAddress("InventoryItem::IsInteractionAvailable^1");
+	AGS_InventoryItem_RunInteraction = (_AGS_INVENTORYITEM_RUNINTERACTION)engine->GetScriptFunctionAddress("InventoryItem::RunInteraction^1");
+	AGS_InventoryItem_get_CursorGraphic = (_AGS_INVENTORYITEM_GET_CURSORGRAPHIC)engine->GetScriptFunctionAddress("InventoryItem::get_CursorGraphic");
+	AGS_InventoryItem_set_CursorGraphic = (_AGS_INVENTORYITEM_SET_CURSORGRAPHIC)engine->GetScriptFunctionAddress("InventoryItem::set_CursorGraphic");
+	AGS_InventoryItem_get_Graphic = (_AGS_INVENTORYITEM_GET_GRAPHIC)engine->GetScriptFunctionAddress("InventoryItem::get_Graphic");
+	AGS_InventoryItem_set_Graphic = (_AGS_INVENTORYITEM_SET_GRAPHIC)engine->GetScriptFunctionAddress("InventoryItem::set_Graphic");
+	AGS_InventoryItem_get_ID = (_AGS_INVENTORYITEM_GET_ID)engine->GetScriptFunctionAddress("InventoryItem::get_ID");
+	AGS_InventoryItem_get_Name = (_AGS_INVENTORYITEM_GET_NAME)engine->GetScriptFunctionAddress("InventoryItem::get_Name");
+	AGS_InventoryItem_set_Name = (_AGS_INVENTORYITEM_SET_NAME)engine->GetScriptFunctionAddress("InventoryItem::set_Name");
+	
+	// Overlay methods
+	AGS_Overlay_CreateGraphical = (_AGS_OVERLAY_CREATEGRAPHICAL)engine->GetScriptFunctionAddress("Overlay::CreateGraphical^4");
+	AGS_Overlay_CreateTextual = (_AGS_OVERLAY_CREATETEXTUAL)engine->GetScriptFunctionAddress("Overlay::CreateTextual^106");
+	AGS_Overlay_SetText = (_AGS_OVERLAY_SETTEXT)engine->GetScriptFunctionAddress("Overlay::SetText^104");
+	AGS_Overlay_Remove = (_AGS_OVERLAY_REMOVE)engine->GetScriptFunctionAddress("Overlay::Remove^0");
+	AGS_Overlay_get_Valid = (_AGS_OVERLAY_GET_VALID)engine->GetScriptFunctionAddress("Overlay::get_Valid");
+	AGS_Overlay_get_X = (_AGS_OVERLAY_GET_X)engine->GetScriptFunctionAddress("Overlay::get_X");
+	AGS_Overlay_set_X = (_AGS_OVERLAY_SET_X)engine->GetScriptFunctionAddress("Overlay::set_X");
+	AGS_Overlay_get_Y = (_AGS_OVERLAY_GET_Y)engine->GetScriptFunctionAddress("Overlay::get_Y");
+	AGS_Overlay_set_Y = (_AGS_OVERLAY_SET_Y)engine->GetScriptFunctionAddress("Overlay::set_Y");
+	
+	// DynamicSprite methods
+	AGS_DynamicSprite_Create = (_AGS_DYNAMICSPRITE_CREATE)engine->GetScriptFunctionAddress("DynamicSprite::Create^3");
+	AGS_DynamicSprite_CreateFromBackground = (_AGS_DYNAMICSPRITE_CREATEFROMBACKGROUND)engine->GetScriptFunctionAddress("DynamicSprite::CreateFromBackground^5");
+	AGS_DynamicSprite_CreateFromDrawingSurface = (_AGS_DYNAMICSPRITE_CREATEFROMDRAWINGSURFACE)engine->GetScriptFunctionAddress("DynamicSprite::CreateFromDrawingSurface^5");
+	AGS_DynamicSprite_CreateFromExistingSprite = (_AGS_DYNAMICSPRITE_CREATEFROMEXISTINGSPRITE)engine->GetScriptFunctionAddress("DynamicSprite::CreateFromExistingSprite^2");
+	AGS_DynamicSprite_CreateFromFile = (_AGS_DYNAMICSPRITE_CREATEFROMFILE)engine->GetScriptFunctionAddress("DynamicSprite::CreateFromFile^1");
+	AGS_DynamicSprite_CreateFromSaveGame = (_AGS_DYNAMICSPRITE_CREATEFROMSAVEGAME)engine->GetScriptFunctionAddress("DynamicSprite::CreateFromSaveGame^3");
+	AGS_DynamicSprite_CreateFromScreenShot = (_AGS_DYNAMICSPRITE_CREATEFROMSCREENSHOT)engine->GetScriptFunctionAddress("DynamicSprite::CreateFromScreenShot^2");
+	AGS_DynamicSprite_ChangeCanvasSize = (_AGS_DYNAMICSPRITE_CHANGECANVASSIZE)engine->GetScriptFunctionAddress("DynamicSprite::ChangeCanvasSize^4");
+	AGS_DynamicSprite_CopyTransparencyMask = (_AGS_DYNAMICSPRITE_COPYTRANSPARENCYMASK)engine->GetScriptFunctionAddress("DynamicSprite::CopyTransparencyMask^1");
+	AGS_DynamicSprite_Crop = (_AGS_DYNAMICSPRITE_CROP)engine->GetScriptFunctionAddress("DynamicSprite::Crop^4");
+	AGS_DynamicSprite_Delete = (_AGS_DYNAMICSPRITE_DELETE)engine->GetScriptFunctionAddress("DynamicSprite::Delete^0");
+	AGS_DynamicSprite_Flip = (_AGS_DYNAMICSPRITE_FLIP)engine->GetScriptFunctionAddress("DynamicSprite::Flip^1");
+	AGS_DynamicSprite_GetDrawingSurface = (_AGS_DYNAMICSPRITE_GETDRAWINGSURFACE)engine->GetScriptFunctionAddress("DynamicSprite::GetDrawingSurface^0");
+	AGS_DynamicSprite_Resize = (_AGS_DYNAMICSPRITE_RESIZE)engine->GetScriptFunctionAddress("DynamicSprite::Resize^2");
+	AGS_DynamicSprite_Rotate = (_AGS_DYNAMICSPRITE_ROTATE)engine->GetScriptFunctionAddress("DynamicSprite::Rotate^3");
+	AGS_DynamicSprite_SaveToFile = (_AGS_DYNAMICSPRITE_SAVETOFILE)engine->GetScriptFunctionAddress("DynamicSprite::SaveToFile^1");
+	AGS_DynamicSprite_Tint = (_AGS_DYNAMICSPRITE_TINT)engine->GetScriptFunctionAddress("DynamicSprite::Tint^5");
+	AGS_DynamicSprite_get_ColorDepth = (_AGS_DYNAMICSPRITE_GET_COLORDEPTH)engine->GetScriptFunctionAddress("DynamicSprite::get_ColorDepth");
+	AGS_DynamicSprite_get_Graphic = (_AGS_DYNAMICSPRITE_GET_GRAPHIC)engine->GetScriptFunctionAddress("DynamicSprite::get_Graphic");
+	AGS_DynamicSprite_get_Height = (_AGS_DYNAMICSPRITE_GET_HEIGHT)engine->GetScriptFunctionAddress("DynamicSprite::get_Height");
+	AGS_DynamicSprite_get_Width = (_AGS_DYNAMICSPRITE_GET_WIDTH)engine->GetScriptFunctionAddress("DynamicSprite::get_Width");
+	
+	// GUIControl methods
+	AGS_GUIControl_BringToFront = (_AGS_GUICONTROL_BRINGTOFRONT)engine->GetScriptFunctionAddress("GUIControl::BringToFront^0");
+	AGS_GUIControl_GetAtScreenXY = (_AGS_GUICONTROL_GETATSCREENXY)engine->GetScriptFunctionAddress("GUIControl::GetAtScreenXY^2");
+	AGS_GUIControl_SendToBack = (_AGS_GUICONTROL_SENDTOBACK)engine->GetScriptFunctionAddress("GUIControl::SendToBack^0");
+	AGS_GUIControl_SetPosition = (_AGS_GUICONTROL_SETPOSITION)engine->GetScriptFunctionAddress("GUIControl::SetPosition^2");
+	AGS_GUIControl_SetSize = (_AGS_GUICONTROL_SETSIZE)engine->GetScriptFunctionAddress("GUIControl::SetSize^2");
+	AGS_GUIControl_get_AsButton = (_AGS_GUICONTROL_GET_ASBUTTON)engine->GetScriptFunctionAddress("GUIControl::get_AsButton");
+	AGS_GUIControl_get_AsInvWindow = (_AGS_GUICONTROL_GET_ASINVWINDOW)engine->GetScriptFunctionAddress("GUIControl::get_AsInvWindow");
+	AGS_GUIControl_get_AsLabel = (_AGS_GUICONTROL_GET_ASLABEL)engine->GetScriptFunctionAddress("GUIControl::get_AsLabel");
+	AGS_GUIControl_get_AsListBox = (_AGS_GUICONTROL_GET_ASLISTBOX)engine->GetScriptFunctionAddress("GUIControl::get_AsListBox");
+	AGS_GUIControl_get_AsSlider = (_AGS_GUICONTROL_GET_ASSLIDER)engine->GetScriptFunctionAddress("GUIControl::get_AsSlider");
+	AGS_GUIControl_get_AsTextBox = (_AGS_GUICONTROL_GET_ASTEXTBOX)engine->GetScriptFunctionAddress("GUIControl::get_AsTextBox");
+	AGS_GUIControl_get_Clickable = (_AGS_GUICONTROL_GET_CLICKABLE)engine->GetScriptFunctionAddress("GUIControl::get_Clickable");
+	AGS_GUIControl_set_Clickable = (_AGS_GUICONTROL_SET_CLICKABLE)engine->GetScriptFunctionAddress("GUIControl::set_Clickable");
+	AGS_GUIControl_get_Enabled = (_AGS_GUICONTROL_GET_ENABLED)engine->GetScriptFunctionAddress("GUIControl::get_Enabled");
+	AGS_GUIControl_set_Enabled = (_AGS_GUICONTROL_SET_ENABLED)engine->GetScriptFunctionAddress("GUIControl::set_Enabled");
+	AGS_GUIControl_get_Height = (_AGS_GUICONTROL_GET_HEIGHT)engine->GetScriptFunctionAddress("GUIControl::get_Height");
+	AGS_GUIControl_set_Height = (_AGS_GUICONTROL_SET_HEIGHT)engine->GetScriptFunctionAddress("GUIControl::set_Height");
+	AGS_GUIControl_get_ID = (_AGS_GUICONTROL_GET_ID)engine->GetScriptFunctionAddress("GUIControl::get_ID");
+	AGS_GUIControl_get_OwningGUI = (_AGS_GUICONTROL_GET_OWNINGGUI)engine->GetScriptFunctionAddress("GUIControl::get_OwningGUI");
+	AGS_GUIControl_get_Visible = (_AGS_GUICONTROL_GET_VISIBLE)engine->GetScriptFunctionAddress("GUIControl::get_Visible");
+	AGS_GUIControl_set_Visible = (_AGS_GUICONTROL_SET_VISIBLE)engine->GetScriptFunctionAddress("GUIControl::set_Visible");
+	AGS_GUIControl_get_Width = (_AGS_GUICONTROL_GET_WIDTH)engine->GetScriptFunctionAddress("GUIControl::get_Width");
+	AGS_GUIControl_set_Width = (_AGS_GUICONTROL_SET_WIDTH)engine->GetScriptFunctionAddress("GUIControl::set_Width");
+	AGS_GUIControl_get_X = (_AGS_GUICONTROL_GET_X)engine->GetScriptFunctionAddress("GUIControl::get_X");
+	AGS_GUIControl_set_X = (_AGS_GUICONTROL_SET_X)engine->GetScriptFunctionAddress("GUIControl::set_X");
+	AGS_GUIControl_get_Y = (_AGS_GUICONTROL_GET_Y)engine->GetScriptFunctionAddress("GUIControl::get_Y");
+	AGS_GUIControl_set_Y = (_AGS_GUICONTROL_SET_Y)engine->GetScriptFunctionAddress("GUIControl::set_Y");
+	
+	// Label methods
+	AGS_Label_get_Font = (_AGS_LABEL_GET_FONT)engine->GetScriptFunctionAddress("Label::get_Font");
+	AGS_Label_set_Font = (_AGS_LABEL_SET_FONT)engine->GetScriptFunctionAddress("Label::set_Font");
+	AGS_Label_get_Text = (_AGS_LABEL_GET_TEXT)engine->GetScriptFunctionAddress("Label::get_Text");
+	AGS_Label_set_Text = (_AGS_LABEL_SET_TEXT)engine->GetScriptFunctionAddress("Label::set_Text");
+	AGS_Label_get_TextColor = (_AGS_LABEL_GET_TEXTCOLOR)engine->GetScriptFunctionAddress("Label::get_TextColor");
+	AGS_Label_set_TextColor = (_AGS_LABEL_SET_TEXTCOLOR)engine->GetScriptFunctionAddress("Label::set_TextColor");
+	
+	// Button methods
+	AGS_Button_Animate = (_AGS_BUTTON_ANIMATE)engine->GetScriptFunctionAddress("Button::Animate^4");
+	AGS_Button_get_ClipImage = (_AGS_BUTTON_GET_CLIPIMAGE)engine->GetScriptFunctionAddress("Button::get_ClipImage");
+	AGS_Button_set_ClipImage = (_AGS_BUTTON_SET_CLIPIMAGE)engine->GetScriptFunctionAddress("Button::set_ClipImage");
+	AGS_Button_get_Font = (_AGS_BUTTON_GET_FONT)engine->GetScriptFunctionAddress("Button::get_Font");
+	AGS_Button_set_Font = (_AGS_BUTTON_SET_FONT)engine->GetScriptFunctionAddress("Button::set_Font");
+	AGS_Button_get_Graphic = (_AGS_BUTTON_GET_GRAPHIC)engine->GetScriptFunctionAddress("Button::get_Graphic");
+	AGS_Button_get_MouseOverGraphic = (_AGS_BUTTON_GET_MOUSEOVERGRAPHIC)engine->GetScriptFunctionAddress("Button::get_MouseOverGraphic");
+	AGS_Button_set_MouseOverGraphic = (_AGS_BUTTON_SET_MOUSEOVERGRAPHIC)engine->GetScriptFunctionAddress("Button::set_MouseOverGraphic");
+	AGS_Button_get_NormalGraphic = (_AGS_BUTTON_GET_NORMALGRAPHIC)engine->GetScriptFunctionAddress("Button::get_NormalGraphic");
+	AGS_Button_set_NormalGraphic = (_AGS_BUTTON_SET_NORMALGRAPHIC)engine->GetScriptFunctionAddress("Button::set_NormalGraphic");
+	AGS_Button_get_PushedGraphic = (_AGS_BUTTON_GET_PUSHEDGRAPHIC)engine->GetScriptFunctionAddress("Button::get_PushedGraphic");
+	AGS_Button_set_PushedGraphic = (_AGS_BUTTON_SET_PUSHEDGRAPHIC)engine->GetScriptFunctionAddress("Button::set_PushedGraphic");
+	AGS_Button_get_TextColor = (_AGS_BUTTON_GET_TEXTCOLOR)engine->GetScriptFunctionAddress("Button::get_TextColor");
+	AGS_Button_set_TextColor = (_AGS_BUTTON_SET_TEXTCOLOR)engine->GetScriptFunctionAddress("Button::set_TextColor");
+	AGS_Button_get_Text = (_AGS_BUTTON_GET_TEXT)engine->GetScriptFunctionAddress("Button::get_Text");
+	AGS_Button_set_Text = (_AGS_BUTTON_SET_TEXT)engine->GetScriptFunctionAddress("Button::set_Text");
+	
+	// Slider methods
+	AGS_Slider_get_BackgroundGraphic = (_AGS_SLIDER_GET_BACKGROUNDGRAPHIC)engine->GetScriptFunctionAddress("Slider::get_BackgroundGraphic");
+	AGS_Slider_set_BackgroundGraphic = (_AGS_SLIDER_SET_BACKGROUNDGRAPHIC)engine->GetScriptFunctionAddress("Slider::set_BackgroundGraphic");
+	AGS_Slider_get_HandleGraphic = (_AGS_SLIDER_GET_HANDLEGRAPHIC)engine->GetScriptFunctionAddress("Slider::get_HandleGraphic");
+	AGS_Slider_set_HandleGraphic = (_AGS_SLIDER_SET_HANDLEGRAPHIC)engine->GetScriptFunctionAddress("Slider::set_HandleGraphic");
+	AGS_Slider_get_HandleOffset = (_AGS_SLIDER_GET_HANDLEOFFSET)engine->GetScriptFunctionAddress("Slider::get_HandleOffset");
+	AGS_Slider_set_HandleOffset = (_AGS_SLIDER_SET_HANDLEOFFSET)engine->GetScriptFunctionAddress("Slider::set_HandleOffset");
+	AGS_Slider_get_Max = (_AGS_SLIDER_GET_MAX)engine->GetScriptFunctionAddress("Slider::get_Max");
+	AGS_Slider_set_Max = (_AGS_SLIDER_SET_MAX)engine->GetScriptFunctionAddress("Slider::set_Max");
+	AGS_Slider_get_Min = (_AGS_SLIDER_GET_MIN)engine->GetScriptFunctionAddress("Slider::get_Min");
+	AGS_Slider_set_Min = (_AGS_SLIDER_SET_MIN)engine->GetScriptFunctionAddress("Slider::set_Min");
+	AGS_Slider_get_Value = (_AGS_SLIDER_GET_VALUE)engine->GetScriptFunctionAddress("Slider::get_Value");
+	AGS_Slider_set_Value = (_AGS_SLIDER_SET_VALUE)engine->GetScriptFunctionAddress("Slider::set_Value");
+	
+	// TextBox methods
+	AGS_TextBox_get_Font = (_AGS_TEXTBOX_GET_FONT)engine->GetScriptFunctionAddress("TextBox::get_Font");
+	AGS_TextBox_set_Font = (_AGS_TEXTBOX_SET_FONT)engine->GetScriptFunctionAddress("TextBox::set_Font");
+	AGS_TextBox_get_Text = (_AGS_TEXTBOX_GET_TEXT)engine->GetScriptFunctionAddress("TextBox::get_Text");
+	AGS_TextBox_set_Text = (_AGS_TEXTBOX_SET_TEXT)engine->GetScriptFunctionAddress("TextBox::set_Text");
+	AGS_TextBox_get_TextColor = (_AGS_TEXTBOX_GET_TEXTCOLOR)engine->GetScriptFunctionAddress("TextBox::get_TextColor");
+	AGS_TextBox_set_TextColor = (_AGS_TEXTBOX_SET_TEXTCOLOR)engine->GetScriptFunctionAddress("TextBox::set_TextColor");
+	
+	// InvWindow methods
+	AGS_InvWindow_ScrollDown = (_AGS_INVWINDOW_SCROLLDOWN)engine->GetScriptFunctionAddress("InvWindow::ScrollDown^0");
+	AGS_InvWindow_ScrollUp = (_AGS_INVWINDOW_SCROLLUP)engine->GetScriptFunctionAddress("InvWindow::ScrollUp^0");
+	AGS_InvWindow_get_CharacterToUse = (_AGS_INVWINDOW_GET_CHARACTERTOUSE)engine->GetScriptFunctionAddress("InvWindow::get_CharacterToUse");
+	AGS_InvWindow_set_CharacterToUse = (_AGS_INVWINDOW_SET_CHARACTERTOUSE)engine->GetScriptFunctionAddress("InvWindow::set_CharacterToUse");
+	AGS_InvWindow_geti_ItemAtIndex = (_AGS_INVWINDOW_GETI_ITEMATINDEX)engine->GetScriptFunctionAddress("InvWindow::geti_ItemAtIndex");
+	AGS_InvWindow_get_ItemCount = (_AGS_INVWINDOW_GET_ITEMCOUNT)engine->GetScriptFunctionAddress("InvWindow::get_ItemCount");
+	AGS_InvWindow_get_ItemHeight = (_AGS_INVWINDOW_GET_ITEMHEIGHT)engine->GetScriptFunctionAddress("InvWindow::get_ItemHeight");
+	AGS_InvWindow_set_ItemHeight = (_AGS_INVWINDOW_SET_ITEMHEIGHT)engine->GetScriptFunctionAddress("InvWindow::set_ItemHeight");
+	AGS_InvWindow_get_ItemWidth = (_AGS_INVWINDOW_GET_ITEMWIDTH)engine->GetScriptFunctionAddress("InvWindow::get_ItemWidth");
+	AGS_InvWindow_set_ItemWidth = (_AGS_INVWINDOW_SET_ITEMWIDTH)engine->GetScriptFunctionAddress("InvWindow::set_ItemWidth");
+	AGS_InvWindow_get_TopItem = (_AGS_INVWINDOW_GET_TOPITEM)engine->GetScriptFunctionAddress("InvWindow::get_TopItem");
+	AGS_InvWindow_set_TopItem = (_AGS_INVWINDOW_SET_TOPITEM)engine->GetScriptFunctionAddress("InvWindow::set_TopItem");
+	AGS_InvWindow_get_ItemsPerRow = (_AGS_INVWINDOW_GET_ITEMSPERROW)engine->GetScriptFunctionAddress("InvWindow::get_ItemsPerRow");
+	AGS_InvWindow_get_RowCount = (_AGS_INVWINDOW_GET_ROWCOUNT)engine->GetScriptFunctionAddress("InvWindow::get_RowCount");
+	
+	// ListBox methods
+	AGS_ListBox_AddItem = (_AGS_LISTBOX_ADDITEM)engine->GetScriptFunctionAddress("ListBox::AddItem^1");
+	AGS_ListBox_Clear = (_AGS_LISTBOX_CLEAR)engine->GetScriptFunctionAddress("ListBox::Clear^0");
+	AGS_ListBox_FillDirList = (_AGS_LISTBOX_FILLDIRLIST)engine->GetScriptFunctionAddress("ListBox::FillDirList^1");
+	AGS_ListBox_FillSaveGameList = (_AGS_LISTBOX_FILLSAVEGAMELIST)engine->GetScriptFunctionAddress("ListBox::FillSaveGameList^0");
+	AGS_ListBox_GetItemAtLocation = (_AGS_LISTBOX_GETITEMATLOCATION)engine->GetScriptFunctionAddress("ListBox::GetItemAtLocation^2");
+	AGS_ListBox_InsertItemAt = (_AGS_LISTBOX_INSERTITEMAT)engine->GetScriptFunctionAddress("ListBox::InsertItemAt^2");
+	AGS_ListBox_RemoveItem = (_AGS_LISTBOX_REMOVEITEM)engine->GetScriptFunctionAddress("ListBox::RemoveItem^1");
+	AGS_ListBox_ScrollDown = (_AGS_LISTBOX_SCROLLDOWN)engine->GetScriptFunctionAddress("ListBox::ScrollDown^0");
+	AGS_ListBox_ScrollUp = (_AGS_LISTBOX_SCROLLUP)engine->GetScriptFunctionAddress("ListBox::ScrollUp^0");
+	AGS_ListBox_get_Font = (_AGS_LISTBOX_GET_FONT)engine->GetScriptFunctionAddress("ListBox::get_Font");
+	AGS_ListBox_set_Font = (_AGS_LISTBOX_SET_FONT)engine->GetScriptFunctionAddress("ListBox::set_Font");
+	AGS_ListBox_get_HideBorder = (_AGS_LISTBOX_GET_HIDEBORDER)engine->GetScriptFunctionAddress("ListBox::get_HideBorder");
+	AGS_ListBox_set_HideBorder = (_AGS_LISTBOX_SET_HIDEBORDER)engine->GetScriptFunctionAddress("ListBox::set_HideBorder");
+	AGS_ListBox_get_HideScrollArrows = (_AGS_LISTBOX_GET_HIDESCROLLARROWS)engine->GetScriptFunctionAddress("ListBox::get_HideScrollArrows");
+	AGS_ListBox_set_HideScrollArrows = (_AGS_LISTBOX_SET_HIDESCROLLARROWS)engine->GetScriptFunctionAddress("ListBox::set_HideScrollArrows");
+	AGS_ListBox_get_ItemCount = (_AGS_LISTBOX_GET_ITEMCOUNT)engine->GetScriptFunctionAddress("ListBox::get_ItemCount");
+	AGS_ListBox_geti_Items = (_AGS_LISTBOX_GETI_ITEMS)engine->GetScriptFunctionAddress("ListBox::geti_Items");
+	AGS_ListBox_seti_Items = (_AGS_LISTBOX_SETI_ITEMS)engine->GetScriptFunctionAddress("ListBox::seti_Items");
+	AGS_ListBox_get_RowCount = (_AGS_LISTBOX_GET_ROWCOUNT)engine->GetScriptFunctionAddress("ListBox::get_RowCount");
+	AGS_ListBox_geti_SaveGameSlots = (_AGS_LISTBOX_GETI_SAVEGAMESLOTS)engine->GetScriptFunctionAddress("ListBox::geti_SaveGameSlots");
+	AGS_ListBox_get_SelectedIndex = (_AGS_LISTBOX_GET_SELECTEDINDEX)engine->GetScriptFunctionAddress("ListBox::get_SelectedIndex");
+	AGS_ListBox_set_SelectedIndex = (_AGS_LISTBOX_SET_SELECTEDINDEX)engine->GetScriptFunctionAddress("ListBox::set_SelectedIndex");
+	AGS_ListBox_get_TopItem = (_AGS_LISTBOX_GET_TOPITEM)engine->GetScriptFunctionAddress("ListBox::get_TopItem");
+	AGS_ListBox_set_TopItem = (_AGS_LISTBOX_SET_TOPITEM)engine->GetScriptFunctionAddress("ListBox::set_TopItem");
+	
+	// GUI methods
+	AGS_GUI_Centre = (_AGS_GUI_CENTRE)engine->GetScriptFunctionAddress("GUI::Centre^0");
+	AGS_GUI_GetAtScreenXY = (_AGS_GUI_GETATSCREENXY)engine->GetScriptFunctionAddress("GUI::GetAtScreenXY^2");
+	AGS_GUI_SetPosition = (_AGS_GUI_SETPOSITION)engine->GetScriptFunctionAddress("GUI::SetPosition^2");
+	AGS_GUI_SetSize = (_AGS_GUI_SETSIZE)engine->GetScriptFunctionAddress("GUI::SetSize^2");
+	AGS_GUI_get_BackgroundGraphic = (_AGS_GUI_GET_BACKGROUNDGRAPHIC)engine->GetScriptFunctionAddress("GUI::get_BackgroundGraphic");
+	AGS_GUI_set_BackgroundGraphic = (_AGS_GUI_SET_BACKGROUNDGRAPHIC)engine->GetScriptFunctionAddress("GUI::set_BackgroundGraphic");
+	AGS_GUI_get_Clickable = (_AGS_GUI_GET_CLICKABLE)engine->GetScriptFunctionAddress("GUI::get_Clickable");
+	AGS_GUI_set_Clickable = (_AGS_GUI_SET_CLICKABLE)engine->GetScriptFunctionAddress("GUI::set_Clickable");
+	AGS_GUI_geti_Controls = (_AGS_GUI_GETI_CONTROLS)engine->GetScriptFunctionAddress("GUI::geti_Controls");
+	AGS_GUI_get_ControlCount = (_AGS_GUI_GET_CONTROLCOUNT)engine->GetScriptFunctionAddress("GUI::get_ControlCount");
+	AGS_GUI_get_Height = (_AGS_GUI_GET_HEIGHT)engine->GetScriptFunctionAddress("GUI::get_Height");
+	AGS_GUI_set_Height = (_AGS_GUI_SET_HEIGHT)engine->GetScriptFunctionAddress("GUI::set_Height");
+	AGS_GUI_get_ID = (_AGS_GUI_GET_ID)engine->GetScriptFunctionAddress("GUI::get_ID");
+	AGS_GUI_get_Transparency = (_AGS_GUI_GET_TRANSPARENCY)engine->GetScriptFunctionAddress("GUI::get_Transparency");
+	AGS_GUI_set_Transparency = (_AGS_GUI_SET_TRANSPARENCY)engine->GetScriptFunctionAddress("GUI::set_Transparency");
+	AGS_GUI_get_Visible = (_AGS_GUI_GET_VISIBLE)engine->GetScriptFunctionAddress("GUI::get_Visible");
+	AGS_GUI_set_Visible = (_AGS_GUI_SET_VISIBLE)engine->GetScriptFunctionAddress("GUI::set_Visible");
+	AGS_GUI_get_Width = (_AGS_GUI_GET_WIDTH)engine->GetScriptFunctionAddress("GUI::get_Width");
+	AGS_GUI_set_Width = (_AGS_GUI_SET_WIDTH)engine->GetScriptFunctionAddress("GUI::set_Width");
+	AGS_GUI_get_X = (_AGS_GUI_GET_X)engine->GetScriptFunctionAddress("GUI::get_X");
+	AGS_GUI_set_X = (_AGS_GUI_SET_X)engine->GetScriptFunctionAddress("GUI::set_X");
+	AGS_GUI_get_Y = (_AGS_GUI_GET_Y)engine->GetScriptFunctionAddress("GUI::get_Y");
+	AGS_GUI_set_Y = (_AGS_GUI_SET_Y)engine->GetScriptFunctionAddress("GUI::set_Y");
+	AGS_GUI_get_ZOrder = (_AGS_GUI_GET_ZORDER)engine->GetScriptFunctionAddress("GUI::get_ZOrder");
+	AGS_GUI_set_ZOrder = (_AGS_GUI_SET_ZORDER)engine->GetScriptFunctionAddress("GUI::set_ZOrder");
+	
+	// Hotspot methods
+	AGS_Hotspot_GetAtScreenXY = (_AGS_HOTSPOT_GETATSCREENXY)engine->GetScriptFunctionAddress("Hotspot::GetAtScreenXY^2");
+	AGS_Hotspot_GetProperty = (_AGS_HOTSPOT_GETPROPERTY)engine->GetScriptFunctionAddress("Hotspot::GetProperty^1");
+	AGS_Hotspot_GetTextProperty = (_AGS_HOTSPOT_GETTEXTPROPERTY)engine->GetScriptFunctionAddress("Hotspot::GetTextProperty^1");
+	AGS_Hotspot_RunInteraction = (_AGS_HOTSPOT_RUNINTERACTION)engine->GetScriptFunctionAddress("Hotspot::RunInteraction^1");
+	AGS_Hotspot_get_Enabled = (_AGS_HOTSPOT_GET_ENABLED)engine->GetScriptFunctionAddress("Hotspot::get_Enabled");
+	AGS_Hotspot_set_Enabled = (_AGS_HOTSPOT_SET_ENABLED)engine->GetScriptFunctionAddress("Hotspot::set_Enabled");
+	AGS_Hotspot_get_ID = (_AGS_HOTSPOT_GET_ID)engine->GetScriptFunctionAddress("Hotspot::get_ID");
+	AGS_Hotspot_get_Name = (_AGS_HOTSPOT_GET_NAME)engine->GetScriptFunctionAddress("Hotspot::get_Name");
+	AGS_Hotspot_get_WalkToX = (_AGS_HOTSPOT_GET_WALKTOX)engine->GetScriptFunctionAddress("Hotspot::get_WalkToX");
+	AGS_Hotspot_get_WalkToY = (_AGS_HOTSPOT_GET_WALKTOY)engine->GetScriptFunctionAddress("Hotspot::get_WalkToY");
+	
+	// Region methods
+	AGS_Region_GetAtRoomXY = (_AGS_REGION_GETATROOMXY)engine->GetScriptFunctionAddress("Region::GetAtRoomXY^2");
+	AGS_Region_RunInteraction = (_AGS_REGION_RUNINTERACTION)engine->GetScriptFunctionAddress("Region::RunInteraction^1");
+	AGS_Region_Tint = (_AGS_REGION_TINT)engine->GetScriptFunctionAddress("Region::Tint^4");
+	AGS_Region_get_Enabled = (_AGS_REGION_GET_ENABLED)engine->GetScriptFunctionAddress("Region::get_Enabled");
+	AGS_Region_set_Enabled = (_AGS_REGION_SET_ENABLED)engine->GetScriptFunctionAddress("Region::set_Enabled");
+	AGS_Region_get_ID = (_AGS_REGION_GET_ID)engine->GetScriptFunctionAddress("Region::get_ID");
+	AGS_Region_get_LightLevel = (_AGS_REGION_GET_LIGHTLEVEL)engine->GetScriptFunctionAddress("Region::get_LightLevel");
+	AGS_Region_set_LightLevel = (_AGS_REGION_SET_LIGHTLEVEL)engine->GetScriptFunctionAddress("Region::set_LightLevel");
+	AGS_Region_get_TintEnabled = (_AGS_REGION_GET_TINTENABLED)engine->GetScriptFunctionAddress("Region::get_TintEnabled");
+	AGS_Region_get_TintBlue = (_AGS_REGION_GET_TINTBLUE)engine->GetScriptFunctionAddress("Region::get_TintBlue");
+	AGS_Region_get_TintGreen = (_AGS_REGION_GET_TINTGREEN)engine->GetScriptFunctionAddress("Region::get_TintGreen");
+	AGS_Region_get_TintRed = (_AGS_REGION_GET_TINTRED)engine->GetScriptFunctionAddress("Region::get_TintRed");
+	AGS_Region_get_TintSaturation = (_AGS_REGION_GET_TINTSATURATION)engine->GetScriptFunctionAddress("Region::get_TintSaturation");
+	
+	// Dialog methods
+	AGS_Dialog_DisplayOptions = (_AGS_DIALOG_DISPLAYOPTIONS)engine->GetScriptFunctionAddress("Dialog::DisplayOptions^1");
+	AGS_Dialog_GetOptionState = (_AGS_DIALOG_GETOPTIONSTATE)engine->GetScriptFunctionAddress("Dialog::GetOptionState^1");
+	AGS_Dialog_GetOptionText = (_AGS_DIALOG_GETOPTIONTEXT)engine->GetScriptFunctionAddress("Dialog::GetOptionText^1");
+	AGS_Dialog_HasOptionBeenChosen = (_AGS_DIALOG_HASOPTIONBEENCHOSEN)engine->GetScriptFunctionAddress("Dialog::HasOptionBeenChosen^1");
+	AGS_Dialog_SetOptionState = (_AGS_DIALOG_SETOPTIONSTATE)engine->GetScriptFunctionAddress("Dialog::SetOptionState^2");
+	AGS_Dialog_Start = (_AGS_DIALOG_START)engine->GetScriptFunctionAddress("Dialog::Start^0");
+	AGS_Dialog_get_ID = (_AGS_DIALOG_GET_ID)engine->GetScriptFunctionAddress("Dialog::get_ID");
+	AGS_Dialog_get_OptionCount = (_AGS_DIALOG_GET_OPTIONCOUNT)engine->GetScriptFunctionAddress("Dialog::get_OptionCount");
+	
+	// DateTime methods
+	AGS_DateTime_get_Now = (_AGS_DATETIME_GET_NOW)engine->GetScriptFunctionAddress("DateTime::get_Now");
+	AGS_DateTime_get_Year = (_AGS_DATETIME_GET_YEAR)engine->GetScriptFunctionAddress("DateTime::get_Year");
+	AGS_DateTime_get_Month = (_AGS_DATETIME_GET_MONTH)engine->GetScriptFunctionAddress("DateTime::get_Month");
+	AGS_DateTime_get_DayOfMonth = (_AGS_DATETIME_GET_DAYOFMONTH)engine->GetScriptFunctionAddress("DateTime::get_DayOfMonth");
+	AGS_DateTime_get_Hour = (_AGS_DATETIME_GET_HOUR)engine->GetScriptFunctionAddress("DateTime::get_Hour");
+	AGS_DateTime_get_Minute = (_AGS_DATETIME_GET_MINUTE)engine->GetScriptFunctionAddress("DateTime::get_Minute");
+	AGS_DateTime_get_Second = (_AGS_DATETIME_GET_SECOND)engine->GetScriptFunctionAddress("DateTime::get_Second");
+	AGS_DateTime_get_RawTime = (_AGS_DATETIME_GET_RAWTIME)engine->GetScriptFunctionAddress("DateTime::get_RawTime");
+	
+	// AudioChannel methods
+	AGS_AudioChannel_Seek = (_AGS_AUDIOCHANNEL_SEEK)engine->GetScriptFunctionAddress("AudioChannel::Seek^1");
+	AGS_AudioChannel_SetRoomLocation = (_AGS_AUDIOCHANNEL_SETROOMLOCATION)engine->GetScriptFunctionAddress("AudioChannel::SetRoomLocation^2");
+	AGS_AudioChannel_Stop = (_AGS_AUDIOCHANNEL_STOP)engine->GetScriptFunctionAddress("AudioChannel::Stop^0");
+	AGS_AudioChannel_get_ID = (_AGS_AUDIOCHANNEL_GET_ID)engine->GetScriptFunctionAddress("AudioChannel::get_ID");
+	AGS_AudioChannel_get_IsPlaying = (_AGS_AUDIOCHANNEL_GET_ISPLAYING)engine->GetScriptFunctionAddress("AudioChannel::get_IsPlaying");
+	AGS_AudioChannel_get_LengthMs = (_AGS_AUDIOCHANNEL_GET_LENGTHMS)engine->GetScriptFunctionAddress("AudioChannel::get_LengthMs");
+	AGS_AudioChannel_get_Panning = (_AGS_AUDIOCHANNEL_GET_PANNING)engine->GetScriptFunctionAddress("AudioChannel::get_Panning");
+	AGS_AudioChannel_set_Panning = (_AGS_AUDIOCHANNEL_SET_PANNING)engine->GetScriptFunctionAddress("AudioChannel::set_Panning");
+	AGS_AudioChannel_get_PlayingClip = (_AGS_AUDIOCHANNEL_GET_PLAYINGCLIP)engine->GetScriptFunctionAddress("AudioChannel::get_PlayingClip");
+	AGS_AudioChannel_get_Position = (_AGS_AUDIOCHANNEL_GET_POSITION)engine->GetScriptFunctionAddress("AudioChannel::get_Position");
+	AGS_AudioChannel_get_PositionMs = (_AGS_AUDIOCHANNEL_GET_POSITIONMS)engine->GetScriptFunctionAddress("AudioChannel::get_PositionMs");
+	AGS_AudioChannel_get_Volume = (_AGS_AUDIOCHANNEL_GET_VOLUME)engine->GetScriptFunctionAddress("AudioChannel::get_Volume");
+	AGS_AudioChannel_set_Volume = (_AGS_AUDIOCHANNEL_SET_VOLUME)engine->GetScriptFunctionAddress("AudioChannel::set_Volume");
+	
+	// AudioClip methods
+	AGS_AudioClip_Play = (_AGS_AUDIOCLIP_PLAY)engine->GetScriptFunctionAddress("AudioClip::Play^2");
+	AGS_AudioClip_PlayFrom = (_AGS_AUDIOCLIP_PLAYFROM)engine->GetScriptFunctionAddress("AudioClip::PlayFrom^3");
+	AGS_AudioClip_PlayQueued = (_AGS_AUDIOCLIP_PLAYQUEUED)engine->GetScriptFunctionAddress("AudioClip::PlayQueued^2");
+	AGS_AudioClip_Stop = (_AGS_AUDIOCLIP_STOP)engine->GetScriptFunctionAddress("AudioClip::Stop^0");
+	AGS_AudioClip_get_FileType = (_AGS_AUDIOCLIP_GET_FILETYPE)engine->GetScriptFunctionAddress("AudioClip::get_FileType");
+	AGS_AudioClip_get_IsAvailable = (_AGS_AUDIOCLIP_GET_ISAVAILABLE)engine->GetScriptFunctionAddress("AudioClip::get_IsAvailable");
+	AGS_AudioClip_get_Type = (_AGS_AUDIOCLIP_GET_TYPE)engine->GetScriptFunctionAddress("AudioClip::get_Type");
+	
+	// System methods
+	AGS_System_get_CapsLock = (_AGS_SYSTEM_GET_CAPSLOCK)engine->GetScriptFunctionAddress("System::get_CapsLock");
+	AGS_System_geti_AudioChannels = (_AGS_SYSTEM_GETI_AUDIOCHANNELS)engine->GetScriptFunctionAddress("System::geti_AudioChannels");
+	AGS_System_get_AudioChannelCount = (_AGS_SYSTEM_GET_AUDIOCHANNELCOUNT)engine->GetScriptFunctionAddress("System::get_AudioChannelCount");
+	AGS_System_get_ColorDepth = (_AGS_SYSTEM_GET_COLORDEPTH)engine->GetScriptFunctionAddress("System::get_ColorDepth");
+	AGS_System_get_Gamma = (_AGS_SYSTEM_GET_GAMMA)engine->GetScriptFunctionAddress("System::get_Gamma");
+	AGS_System_set_Gamma = (_AGS_SYSTEM_SET_GAMMA)engine->GetScriptFunctionAddress("System::set_Gamma");
+	AGS_System_get_HardwareAcceleration = (_AGS_SYSTEM_GET_HARDWAREACCELERATION)engine->GetScriptFunctionAddress("System::get_HardwareAcceleration");
+	AGS_System_get_NumLock = (_AGS_SYSTEM_GET_NUMLOCK)engine->GetScriptFunctionAddress("System::get_NumLock");
+	AGS_System_get_OperatingSystem = (_AGS_SYSTEM_GET_OPERATINGSYSTEM)engine->GetScriptFunctionAddress("System::get_OperatingSystem");
+	AGS_System_get_ScreenHeight = (_AGS_SYSTEM_GET_SCREENHEIGHT)engine->GetScriptFunctionAddress("System::get_ScreenHeight");
+	AGS_System_get_ScreenWidth = (_AGS_SYSTEM_GET_SCREENWIDTH)engine->GetScriptFunctionAddress("System::get_ScreenWidth");
+	AGS_System_get_ScrollLock = (_AGS_SYSTEM_GET_SCROLLLOCK)engine->GetScriptFunctionAddress("System::get_ScrollLock");
+	AGS_System_get_SupportsGammaControl = (_AGS_SYSTEM_GET_SUPPORTSGAMMACONTROL)engine->GetScriptFunctionAddress("System::get_SupportsGammaControl");
+	AGS_System_get_Version = (_AGS_SYSTEM_GET_VERSION)engine->GetScriptFunctionAddress("System::get_Version");
+	AGS_System_get_ViewportHeight = (_AGS_SYSTEM_GET_VIEWPORTHEIGHT)engine->GetScriptFunctionAddress("System::get_ViewportHeight");
+	AGS_System_get_ViewportWidth = (_AGS_SYSTEM_GET_VIEWPORTWIDTH)engine->GetScriptFunctionAddress("System::get_ViewportWidth");
+	AGS_System_get_Volume = (_AGS_SYSTEM_GET_VOLUME)engine->GetScriptFunctionAddress("System::get_Volume");
+	AGS_System_set_Volume = (_AGS_SYSTEM_SET_VOLUME)engine->GetScriptFunctionAddress("System::set_Volume");
+	AGS_System_get_VSync = (_AGS_SYSTEM_GET_VSYNC)engine->GetScriptFunctionAddress("System::get_VSync");
+	AGS_System_set_VSync = (_AGS_SYSTEM_SET_VSYNC)engine->GetScriptFunctionAddress("System::set_VSync");
+	AGS_System_get_Windowed = (_AGS_SYSTEM_GET_WINDOWED)engine->GetScriptFunctionAddress("System::get_Windowed");
+	
+	// Object methods
+	AGS_Object_Animate = (_AGS_OBJECT_ANIMATE)engine->GetScriptFunctionAddress("Object::Animate^5");
+	AGS_Object_GetAtScreenXY = (_AGS_OBJECT_GETATSCREENXY)engine->GetScriptFunctionAddress("Object::GetAtScreenXY^2");
+	AGS_Object_GetProperty = (_AGS_OBJECT_GETPROPERTY)engine->GetScriptFunctionAddress("Object::GetProperty^1");
+	AGS_Object_GetTextProperty = (_AGS_OBJECT_GETTEXTPROPERTY)engine->GetScriptFunctionAddress("Object::GetTextProperty^1");
+	AGS_Object_IsCollidingWithObject = (_AGS_OBJECT_ISCOLLIDINGWITHOBJECT)engine->GetScriptFunctionAddress("Object::IsCollidingWithObject^1");
+	AGS_Object_MergeIntoBackground = (_AGS_OBJECT_MERGEINTOBACKGROUND)engine->GetScriptFunctionAddress("Object::MergeIntoBackground^0");
+	AGS_Object_Move = (_AGS_OBJECT_MOVE)engine->GetScriptFunctionAddress("Object::Move^5");
+	AGS_Object_RemoveTint = (_AGS_OBJECT_REMOVETINT)engine->GetScriptFunctionAddress("Object::RemoveTint^0");
+	AGS_Object_RunInteraction = (_AGS_OBJECT_RUNINTERACTION)engine->GetScriptFunctionAddress("Object::RunInteraction^1");
+	AGS_Object_SetPosition = (_AGS_OBJECT_SETPOSITION)engine->GetScriptFunctionAddress("Object::SetPosition^2");
+	AGS_Object_SetView = (_AGS_OBJECT_SETVIEW)engine->GetScriptFunctionAddress("Object::SetView^3");
+	AGS_Object_StopAnimating = (_AGS_OBJECT_STOPANIMATING)engine->GetScriptFunctionAddress("Object::StopAnimating^0");
+	AGS_Object_StopMoving = (_AGS_OBJECT_STOPMOVING)engine->GetScriptFunctionAddress("Object::StopMoving^0");
+	AGS_Object_Tint = (_AGS_OBJECT_TINT)engine->GetScriptFunctionAddress("Object::Tint^5");
+	AGS_Object_get_Animating = (_AGS_OBJECT_GET_ANIMATING)engine->GetScriptFunctionAddress("Object::get_Animating");
+	AGS_Object_get_Baseline = (_AGS_OBJECT_GET_BASELINE)engine->GetScriptFunctionAddress("Object::get_Baseline");
+	AGS_Object_set_Baseline = (_AGS_OBJECT_SET_BASELINE)engine->GetScriptFunctionAddress("Object::set_Baseline");
+	AGS_Object_get_BlockingHeight = (_AGS_OBJECT_GET_BLOCKINGHEIGHT)engine->GetScriptFunctionAddress("Object::get_BlockingHeight");
+	AGS_Object_set_BlockingHeight = (_AGS_OBJECT_SET_BLOCKINGHEIGHT)engine->GetScriptFunctionAddress("Object::set_BlockingHeight");
+	AGS_Object_get_BlockingWidth = (_AGS_OBJECT_GET_BLOCKINGWIDTH)engine->GetScriptFunctionAddress("Object::get_BlockingWidth");
+	AGS_Object_set_BlockingWidth = (_AGS_OBJECT_SET_BLOCKINGWIDTH)engine->GetScriptFunctionAddress("Object::set_BlockingWidth");
+	AGS_Object_get_Clickable = (_AGS_OBJECT_GET_CLICKABLE)engine->GetScriptFunctionAddress("Object::get_Clickable");
+	AGS_Object_set_Clickable = (_AGS_OBJECT_SET_CLICKABLE)engine->GetScriptFunctionAddress("Object::set_Clickable");
+	AGS_Object_get_Frame = (_AGS_OBJECT_GET_FRAME)engine->GetScriptFunctionAddress("Object::get_Frame");
+	AGS_Object_get_Graphic = (_AGS_OBJECT_GET_GRAPHIC)engine->GetScriptFunctionAddress("Object::get_Graphic");
+	AGS_Object_set_Graphic = (_AGS_OBJECT_SET_GRAPHIC)engine->GetScriptFunctionAddress("Object::set_Graphic");
+	AGS_Object_get_ID = (_AGS_OBJECT_GET_ID)engine->GetScriptFunctionAddress("Object::get_ID");
+	AGS_Object_get_IgnoreScaling = (_AGS_OBJECT_GET_IGNORESCALING)engine->GetScriptFunctionAddress("Object::get_IgnoreScaling");
+	AGS_Object_set_IgnoreScaling = (_AGS_OBJECT_SET_IGNORESCALING)engine->GetScriptFunctionAddress("Object::set_IgnoreScaling");
+	AGS_Object_get_IgnoreWalkbehinds = (_AGS_OBJECT_GET_IGNOREWALKBEHINDS)engine->GetScriptFunctionAddress("Object::get_IgnoreWalkbehinds");
+	AGS_Object_set_IgnoreWalkbehinds = (_AGS_OBJECT_SET_IGNOREWALKBEHINDS)engine->GetScriptFunctionAddress("Object::set_IgnoreWalkbehinds");
+	AGS_Object_get_Loop = (_AGS_OBJECT_GET_LOOP)engine->GetScriptFunctionAddress("Object::get_Loop");
+	AGS_Object_get_Moving = (_AGS_OBJECT_GET_MOVING)engine->GetScriptFunctionAddress("Object::get_Moving");
+	AGS_Object_get_Name = (_AGS_OBJECT_GET_NAME)engine->GetScriptFunctionAddress("Object::get_Name");
+	AGS_Object_get_Solid = (_AGS_OBJECT_GET_SOLID)engine->GetScriptFunctionAddress("Object::get_Solid");
+	AGS_Object_set_Solid = (_AGS_OBJECT_SET_SOLID)engine->GetScriptFunctionAddress("Object::set_Solid");
+	AGS_Object_get_Transparency = (_AGS_OBJECT_GET_TRANSPARENCY)engine->GetScriptFunctionAddress("Object::get_Transparency");
+	AGS_Object_set_Transparency = (_AGS_OBJECT_SET_TRANSPARENCY)engine->GetScriptFunctionAddress("Object::set_Transparency");
+	AGS_Object_get_View = (_AGS_OBJECT_GET_VIEW)engine->GetScriptFunctionAddress("Object::get_View");
+	AGS_Object_get_Visible = (_AGS_OBJECT_GET_VISIBLE)engine->GetScriptFunctionAddress("Object::get_Visible");
+	AGS_Object_set_Visible = (_AGS_OBJECT_SET_VISIBLE)engine->GetScriptFunctionAddress("Object::set_Visible");
+	AGS_Object_get_X = (_AGS_OBJECT_GET_X)engine->GetScriptFunctionAddress("Object::get_X");
+	AGS_Object_set_X = (_AGS_OBJECT_SET_X)engine->GetScriptFunctionAddress("Object::set_X");
+	AGS_Object_get_Y = (_AGS_OBJECT_GET_Y)engine->GetScriptFunctionAddress("Object::get_Y");
+	AGS_Object_set_Y = (_AGS_OBJECT_SET_Y)engine->GetScriptFunctionAddress("Object::set_Y");
+	
+	// Character methods
+	AGS_Character_AddInventory = (_AGS_CHARACTER_ADDINVENTORY)engine->GetScriptFunctionAddress("Character::AddInventory^2");
+	AGS_Character_AddWaypoint = (_AGS_CHARACTER_ADDWAYPOINT)engine->GetScriptFunctionAddress("Character::AddWaypoint^2");
+	AGS_Character_Animate = (_AGS_CHARACTER_ANIMATE)engine->GetScriptFunctionAddress("Character::Animate^5");
+	AGS_Character_ChangeRoom = (_AGS_CHARACTER_CHANGEROOM)engine->GetScriptFunctionAddress("Character::ChangeRoom^3");
+	AGS_Character_ChangeRoomAutoPosition = (_AGS_CHARACTER_CHANGEROOMAUTOPOSITION)engine->GetScriptFunctionAddress("Character::ChangeRoomAutoPosition^2");
+	AGS_Character_ChangeView = (_AGS_CHARACTER_CHANGEVIEW)engine->GetScriptFunctionAddress("Character::ChangeView^1");
+	AGS_Character_FaceCharacter = (_AGS_CHARACTER_FACECHARACTER)engine->GetScriptFunctionAddress("Character::FaceCharacter^2");
+	AGS_Character_FaceLocation = (_AGS_CHARACTER_FACELOCATION)engine->GetScriptFunctionAddress("Character::FaceLocation^3");
+	AGS_Character_FaceObject = (_AGS_CHARACTER_FACEOBJECT)engine->GetScriptFunctionAddress("Character::FaceObject^2");
+	AGS_Character_FollowCharacter = (_AGS_CHARACTER_FOLLOWCHARACTER)engine->GetScriptFunctionAddress("Character::FollowCharacter^3");
+	AGS_Character_GetAtScreenXY = (_AGS_CHARACTER_GETATSCREENXY)engine->GetScriptFunctionAddress("Character::GetAtScreenXY^2");
+	AGS_Character_GetProperty = (_AGS_CHARACTER_GETPROPERTY)engine->GetScriptFunctionAddress("Character::GetProperty^1");
+	AGS_Character_GetTextProperty = (_AGS_CHARACTER_GETTEXTPROPERTY)engine->GetScriptFunctionAddress("Character::GetTextProperty^1");
+	AGS_Character_HasInventory = (_AGS_CHARACTER_HASINVENTORY)engine->GetScriptFunctionAddress("Character::HasInventory^1");
+	AGS_Character_IsCollidingWithChar = (_AGS_CHARACTER_ISCOLLIDINGWITHCHAR)engine->GetScriptFunctionAddress("Character::IsCollidingWithChar^1");
+	AGS_Character_IsCollidingWithObject = (_AGS_CHARACTER_ISCOLLIDINGWITHOBJECT)engine->GetScriptFunctionAddress("Character::IsCollidingWithObject^1");
+	AGS_Character_LockView = (_AGS_CHARACTER_LOCKVIEW)engine->GetScriptFunctionAddress("Character::LockView^1");
+	AGS_Character_LockViewAligned = (_AGS_CHARACTER_LOCKVIEWALIGNED)engine->GetScriptFunctionAddress("Character::LockViewAligned^3");
+	AGS_Character_LockViewFrame = (_AGS_CHARACTER_LOCKVIEWFRAME)engine->GetScriptFunctionAddress("Character::LockViewFrame^3");
+	AGS_Character_LockViewOffset = (_AGS_CHARACTER_LOCKVIEWOFFSET)engine->GetScriptFunctionAddress("Character::LockViewOffset^3");
+	AGS_Character_LoseInventory = (_AGS_CHARACTER_LOSEINVENTORY)engine->GetScriptFunctionAddress("Character::LoseInventory^1");
+	AGS_Character_Move = (_AGS_CHARACTER_MOVE)engine->GetScriptFunctionAddress("Character::Move^4");
+	AGS_Character_PlaceOnWalkableArea = (_AGS_CHARACTER_PLACEONWALKABLEAREA)engine->GetScriptFunctionAddress("Character::PlaceOnWalkableArea^0");
+	AGS_Character_RemoveTint = (_AGS_CHARACTER_REMOVETINT)engine->GetScriptFunctionAddress("Character::RemoveTint^0");
+	AGS_Character_RunInteraction = (_AGS_CHARACTER_RUNINTERACTION)engine->GetScriptFunctionAddress("Character::RunInteraction^1");
+	AGS_Character_Say = (_AGS_CHARACTER_SAY)engine->GetScriptFunctionAddress("Character::Say^101");
+	AGS_Character_SayAt = (_AGS_CHARACTER_SAYAT)engine->GetScriptFunctionAddress("Character::SayAt^4");
+	AGS_Character_SayBackground = (_AGS_CHARACTER_SAYBACKGROUND)engine->GetScriptFunctionAddress("Character::SayBackground^1");
+	AGS_Character_SetAsPlayer = (_AGS_CHARACTER_SETASPLAYER)engine->GetScriptFunctionAddress("Character::SetAsPlayer^0");
+	AGS_Character_SetIdleView = (_AGS_CHARACTER_SETIDLEVIEW)engine->GetScriptFunctionAddress("Character::SetIdleView^2");
+	AGS_Character_SetWalkSpeed = (_AGS_CHARACTER_SETWALKSPEED)engine->GetScriptFunctionAddress("Character::SetWalkSpeed^2");
+	AGS_Character_StopMoving = (_AGS_CHARACTER_STOPMOVING)engine->GetScriptFunctionAddress("Character::StopMoving^0");
+	AGS_Character_Think = (_AGS_CHARACTER_THINK)engine->GetScriptFunctionAddress("Character::Think^101");
+	AGS_Character_Tint = (_AGS_CHARACTER_TINT)engine->GetScriptFunctionAddress("Character::Tint^5");
+	AGS_Character_UnlockView = (_AGS_CHARACTER_UNLOCKVIEW)engine->GetScriptFunctionAddress("Character::UnlockView^0");
+	AGS_Character_Walk = (_AGS_CHARACTER_WALK)engine->GetScriptFunctionAddress("Character::Walk^4");
+	AGS_Character_WalkStraight = (_AGS_CHARACTER_WALKSTRAIGHT)engine->GetScriptFunctionAddress("Character::WalkStraight^3");
+	AGS_Character_get_ActiveInventory = (_AGS_CHARACTER_GET_ACTIVEINVENTORY)engine->GetScriptFunctionAddress("Character::get_ActiveInventory");
+	AGS_Character_set_ActiveInventory = (_AGS_CHARACTER_SET_ACTIVEINVENTORY)engine->GetScriptFunctionAddress("Character::set_ActiveInventory");
+	AGS_Character_get_Animating = (_AGS_CHARACTER_GET_ANIMATING)engine->GetScriptFunctionAddress("Character::get_Animating");
+	AGS_Character_get_AnimationSpeed = (_AGS_CHARACTER_GET_ANIMATIONSPEED)engine->GetScriptFunctionAddress("Character::get_AnimationSpeed");
+	AGS_Character_set_AnimationSpeed = (_AGS_CHARACTER_SET_ANIMATIONSPEED)engine->GetScriptFunctionAddress("Character::set_AnimationSpeed");
+	AGS_Character_get_Baseline = (_AGS_CHARACTER_GET_BASELINE)engine->GetScriptFunctionAddress("Character::get_Baseline");
+	AGS_Character_set_Baseline = (_AGS_CHARACTER_SET_BASELINE)engine->GetScriptFunctionAddress("Character::set_Baseline");
+	AGS_Character_get_BlinkInterval = (_AGS_CHARACTER_GET_BLINKINTERVAL)engine->GetScriptFunctionAddress("Character::get_BlinkInterval");
+	AGS_Character_set_BlinkInterval = (_AGS_CHARACTER_SET_BLINKINTERVAL)engine->GetScriptFunctionAddress("Character::set_BlinkInterval");
+	AGS_Character_get_BlinkView = (_AGS_CHARACTER_GET_BLINKVIEW)engine->GetScriptFunctionAddress("Character::get_BlinkView");
+	AGS_Character_set_BlinkView = (_AGS_CHARACTER_SET_BLINKVIEW)engine->GetScriptFunctionAddress("Character::set_BlinkView");
+	AGS_Character_get_BlinkWhileThinking = (_AGS_CHARACTER_GET_BLINKWHILETHINKING)engine->GetScriptFunctionAddress("Character::get_BlinkWhileThinking");
+	AGS_Character_set_BlinkWhileThinking = (_AGS_CHARACTER_SET_BLINKWHILETHINKING)engine->GetScriptFunctionAddress("Character::set_BlinkWhileThinking");
+	AGS_Character_get_BlockingHeight = (_AGS_CHARACTER_GET_BLOCKINGHEIGHT)engine->GetScriptFunctionAddress("Character::get_BlockingHeight");
+	AGS_Character_set_BlockingHeight = (_AGS_CHARACTER_SET_BLOCKINGHEIGHT)engine->GetScriptFunctionAddress("Character::set_BlockingHeight");
+	AGS_Character_get_BlockingWidth = (_AGS_CHARACTER_GET_BLOCKINGWIDTH)engine->GetScriptFunctionAddress("Character::get_BlockingWidth");
+	AGS_Character_set_BlockingWidth = (_AGS_CHARACTER_SET_BLOCKINGWIDTH)engine->GetScriptFunctionAddress("Character::set_BlockingWidth");
+	AGS_Character_get_Clickable = (_AGS_CHARACTER_GET_CLICKABLE)engine->GetScriptFunctionAddress("Character::get_Clickable");
+	AGS_Character_set_Clickable = (_AGS_CHARACTER_SET_CLICKABLE)engine->GetScriptFunctionAddress("Character::set_Clickable");
+	AGS_Character_get_DiagonalLoops = (_AGS_CHARACTER_GET_DIAGONALLOOPS)engine->GetScriptFunctionAddress("Character::get_DiagonalLoops");
+	AGS_Character_set_DiagonalLoops = (_AGS_CHARACTER_SET_DIAGONALLOOPS)engine->GetScriptFunctionAddress("Character::set_DiagonalLoops");
+	AGS_Character_get_Frame = (_AGS_CHARACTER_GET_FRAME)engine->GetScriptFunctionAddress("Character::get_Frame");
+	AGS_Character_set_Frame = (_AGS_CHARACTER_SET_FRAME)engine->GetScriptFunctionAddress("Character::set_Frame");
+	AGS_Character_get_HasExplicitTint = (_AGS_CHARACTER_GET_HASEXPLICITTINT)engine->GetScriptFunctionAddress("Character::get_HasExplicitTint");
+	AGS_Character_get_ID = (_AGS_CHARACTER_GET_ID)engine->GetScriptFunctionAddress("Character::get_ID");
+	AGS_Character_get_IdleView = (_AGS_CHARACTER_GET_IDLEVIEW)engine->GetScriptFunctionAddress("Character::get_IdleView");
+	AGS_Character_get_IgnoreLighting = (_AGS_CHARACTER_GET_IGNORELIGHTING)engine->GetScriptFunctionAddress("Character::get_IgnoreLighting");
+	AGS_Character_set_IgnoreLighting = (_AGS_CHARACTER_SET_IGNORELIGHTING)engine->GetScriptFunctionAddress("Character::set_IgnoreLighting");
+	AGS_Character_get_IgnoreScaling = (_AGS_CHARACTER_GET_IGNORESCALING)engine->GetScriptFunctionAddress("Character::get_IgnoreScaling");
+	AGS_Character_set_IgnoreScaling = (_AGS_CHARACTER_SET_IGNORESCALING)engine->GetScriptFunctionAddress("Character::set_IgnoreScaling");
+	AGS_Character_get_IgnoreWalkbehinds = (_AGS_CHARACTER_GET_IGNOREWALKBEHINDS)engine->GetScriptFunctionAddress("Character::get_IgnoreWalkbehinds");
+	AGS_Character_set_IgnoreWalkbehinds = (_AGS_CHARACTER_SET_IGNOREWALKBEHINDS)engine->GetScriptFunctionAddress("Character::set_IgnoreWalkbehinds");
+	AGS_Character_geti_InventoryQuantity = (_AGS_CHARACTER_GETI_INVENTORYQUANTITY)engine->GetScriptFunctionAddress("Character::geti_InventoryQuantity");
+	AGS_Character_seti_InventoryQuantity = (_AGS_CHARACTER_SETI_INVENTORYQUANTITY)engine->GetScriptFunctionAddress("Character::seti_InventoryQuantity");
+	AGS_Character_get_Loop = (_AGS_CHARACTER_GET_LOOP)engine->GetScriptFunctionAddress("Character::get_Loop");
+	AGS_Character_set_Loop = (_AGS_CHARACTER_SET_LOOP)engine->GetScriptFunctionAddress("Character::set_Loop");
+	AGS_Character_get_ManualScaling = (_AGS_CHARACTER_GET_MANUALSCALING)engine->GetScriptFunctionAddress("Character::get_ManualScaling");
+	AGS_Character_set_ManualScaling = (_AGS_CHARACTER_SET_MANUALSCALING)engine->GetScriptFunctionAddress("Character::set_ManualScaling");
+	AGS_Character_get_MovementLinkedToAnimation = (_AGS_CHARACTER_GET_MOVEMENTLINKEDTOANIMATION)engine->GetScriptFunctionAddress("Character::get_MovementLinkedToAnimation");
+	AGS_Character_set_MovementLinkedToAnimation = (_AGS_CHARACTER_SET_MOVEMENTLINKEDTOANIMATION)engine->GetScriptFunctionAddress("Character::set_MovementLinkedToAnimation");
+	AGS_Character_get_Moving = (_AGS_CHARACTER_GET_MOVING)engine->GetScriptFunctionAddress("Character::get_Moving");
+	AGS_Character_get_Name = (_AGS_CHARACTER_GET_NAME)engine->GetScriptFunctionAddress("Character::get_Name");
+	AGS_Character_set_Name = (_AGS_CHARACTER_SET_NAME)engine->GetScriptFunctionAddress("Character::set_Name");
+	AGS_Character_get_NormalView = (_AGS_CHARACTER_GET_NORMALVIEW)engine->GetScriptFunctionAddress("Character::get_NormalView");
+	AGS_Character_get_PreviousRoom = (_AGS_CHARACTER_GET_PREVIOUSROOM)engine->GetScriptFunctionAddress("Character::get_PreviousRoom");
+	AGS_Character_get_Room = (_AGS_CHARACTER_GET_ROOM)engine->GetScriptFunctionAddress("Character::get_Room");
+	AGS_Character_get_ScaleMoveSpeed = (_AGS_CHARACTER_GET_SCALEMOVESPEED)engine->GetScriptFunctionAddress("Character::get_ScaleMoveSpeed");
+	AGS_Character_set_ScaleMoveSpeed = (_AGS_CHARACTER_SET_SCALEMOVESPEED)engine->GetScriptFunctionAddress("Character::set_ScaleMoveSpeed");
+	AGS_Character_get_ScaleVolume = (_AGS_CHARACTER_GET_SCALEVOLUME)engine->GetScriptFunctionAddress("Character::get_ScaleVolume");
+	AGS_Character_set_ScaleVolume = (_AGS_CHARACTER_SET_SCALEVOLUME)engine->GetScriptFunctionAddress("Character::set_ScaleVolume");
+	AGS_Character_get_Scaling = (_AGS_CHARACTER_GET_SCALING)engine->GetScriptFunctionAddress("Character::get_Scaling");
+	AGS_Character_set_Scaling = (_AGS_CHARACTER_SET_SCALING)engine->GetScriptFunctionAddress("Character::set_Scaling");
+	AGS_Character_get_Solid = (_AGS_CHARACTER_GET_SOLID)engine->GetScriptFunctionAddress("Character::get_Solid");
+	AGS_Character_set_Solid = (_AGS_CHARACTER_SET_SOLID)engine->GetScriptFunctionAddress("Character::set_Solid");
+	AGS_Character_get_Speaking = (_AGS_CHARACTER_GET_SPEAKING)engine->GetScriptFunctionAddress("Character::get_Speaking");
+	AGS_Character_get_SpeakingFrame = (_AGS_CHARACTER_GET_SPEAKINGFRAME)engine->GetScriptFunctionAddress("Character::get_SpeakingFrame");
+	AGS_Character_get_SpeechAnimationDelay = (_AGS_CHARACTER_GET_SPEECHANIMATIONDELAY)engine->GetScriptFunctionAddress("Character::get_SpeechAnimationDelay");
+	AGS_Character_set_SpeechAnimationDelay = (_AGS_CHARACTER_SET_SPEECHANIMATIONDELAY)engine->GetScriptFunctionAddress("Character::set_SpeechAnimationDelay");
+	AGS_Character_get_SpeechColor = (_AGS_CHARACTER_GET_SPEECHCOLOR)engine->GetScriptFunctionAddress("Character::get_SpeechColor");
+	AGS_Character_set_SpeechColor = (_AGS_CHARACTER_SET_SPEECHCOLOR)engine->GetScriptFunctionAddress("Character::set_SpeechColor");
+	AGS_Character_get_SpeechView = (_AGS_CHARACTER_GET_SPEECHVIEW)engine->GetScriptFunctionAddress("Character::get_SpeechView");
+	AGS_Character_set_SpeechView = (_AGS_CHARACTER_SET_SPEECHVIEW)engine->GetScriptFunctionAddress("Character::set_SpeechView");
+	AGS_Character_get_ThinkView = (_AGS_CHARACTER_GET_THINKVIEW)engine->GetScriptFunctionAddress("Character::get_ThinkView");
+	AGS_Character_set_ThinkView = (_AGS_CHARACTER_SET_THINKVIEW)engine->GetScriptFunctionAddress("Character::set_ThinkView");
+	AGS_Character_get_Transparency = (_AGS_CHARACTER_GET_TRANSPARENCY)engine->GetScriptFunctionAddress("Character::get_Transparency");
+	AGS_Character_set_Transparency = (_AGS_CHARACTER_SET_TRANSPARENCY)engine->GetScriptFunctionAddress("Character::set_Transparency");
+	AGS_Character_get_TurnBeforeWalking = (_AGS_CHARACTER_GET_TURNBEFOREWALKING)engine->GetScriptFunctionAddress("Character::get_TurnBeforeWalking");
+	AGS_Character_set_TurnBeforeWalking = (_AGS_CHARACTER_SET_TURNBEFOREWALKING)engine->GetScriptFunctionAddress("Character::set_TurnBeforeWalking");
+	AGS_Character_get_View = (_AGS_CHARACTER_GET_VIEW)engine->GetScriptFunctionAddress("Character::get_View");
+	AGS_Character_get_WalkSpeedX = (_AGS_CHARACTER_GET_WALKSPEEDX)engine->GetScriptFunctionAddress("Character::get_WalkSpeedX");
+	AGS_Character_get_WalkSpeedY = (_AGS_CHARACTER_GET_WALKSPEEDY)engine->GetScriptFunctionAddress("Character::get_WalkSpeedY");
+	AGS_Character_get_x = (_AGS_CHARACTER_GET_X)engine->GetScriptFunctionAddress("Character::get_x");
+	AGS_Character_set_x = (_AGS_CHARACTER_SET_X)engine->GetScriptFunctionAddress("Character::set_x");
+	AGS_Character_get_y = (_AGS_CHARACTER_GET_Y)engine->GetScriptFunctionAddress("Character::get_y");
+	AGS_Character_set_y = (_AGS_CHARACTER_SET_Y)engine->GetScriptFunctionAddress("Character::set_y");
+	AGS_Character_get_z = (_AGS_CHARACTER_GET_Z)engine->GetScriptFunctionAddress("Character::get_z");
+	AGS_Character_set_z = (_AGS_CHARACTER_SET_Z)engine->GetScriptFunctionAddress("Character::set_z");
+};
+
+// Global function Lua wrappers
+static int luags_Display(lua_State *L) {
+	aux_formatstring(L, 1);
+	AGS_Display(lua_tostring(L,1));
+	return 0;
+};
+static int luags_DisplayAt(lua_State *L) {
+	aux_formatstring(L, 4);
+	AGS_DisplayAt((int)luaL_checkint(L,1), (int)luaL_checkint(L,2), (int)luaL_checkint(L,3), lua_tostring(L,4));
+	return 0;
+};
+static int luags_DisplayAtY(lua_State *L) {
+	AGS_DisplayAtY((int)luaL_checkint(L,1), luaL_checkstring(L,2));
+	return 0;
+};
+static int luags_DisplayMessage(lua_State *L) {
+	AGS_DisplayMessage((int)luaL_checkint(L,1));
+	return 0;
+};
+static int luags_DisplayMessageAtY(lua_State *L) {
+	AGS_DisplayMessageAtY((int)luaL_checkint(L,1), (int)luaL_checkint(L,2));
+	return 0;
+};
+static int luags_DisplayTopBar(lua_State *L) {
+	aux_formatstring(L, 5);
+	AGS_DisplayTopBar((int)luaL_checkint(L,1), (int)luaL_checkint(L,2), (int)luaL_checkint(L,3), lua_tostring(L,4), lua_tostring(L,5));
+	return 0;
+};
+static int luags_DisplayMessageBar(lua_State *L) {
+	AGS_DisplayMessageBar((int)luaL_checkint(L,1), (int)luaL_checkint(L,2), (int)luaL_checkint(L,3), luaL_checkstring(L,4), (int)luaL_checkint(L,5));
+	return 0;
+};
+static int luags_ResetRoom(lua_State *L) {
+	AGS_ResetRoom((int)luaL_checkint(L,1));
+	return 0;
+};
+static int luags_HasPlayerBeenInRoom(lua_State *L) {
+	lua_pushinteger(L, AGS_HasPlayerBeenInRoom((int)luaL_checkint(L,1)));
+	return 1;
+};
+static int luags_ProcessClick(lua_State *L) {
+	AGS_ProcessClick((int)luaL_checkint(L,1), (int)luaL_checkint(L,2), luags_checkCursorMode(L,3));
+	return 0;
+};
+static int luags_AbortGame(lua_State *L) {
+	aux_formatstring(L, 1);
+	AGS_AbortGame(lua_tostring(L,1));
+	return 0;
+};
+static int luags_QuitGame(lua_State *L) {
+	AGS_QuitGame((int)luaL_checkint(L,1));
+	return 0;
+};
+static int luags_SetGameSpeed(lua_State *L) {
+	AGS_SetGameSpeed((int)luaL_checkint(L,1));
+	return 0;
+};
+static int luags_GetGameSpeed(lua_State *L) {
+	lua_pushinteger(L, AGS_GetGameSpeed());
+	return 1;
+};
+static int luags_SetGameOption(lua_State *L) {
+	lua_pushinteger(L, AGS_SetGameOption((int)luaL_checkint(L,1), (int)luaL_checkint(L,2)));
+	return 1;
+};
+static int luags_GetGameOption(lua_State *L) {
+	lua_pushinteger(L, AGS_GetGameOption((int)luaL_checkint(L,1)));
+	return 1;
+};
+static int luags_Debug(lua_State *L) {
+	AGS_Debug((int)luaL_checkint(L,1), (int)luaL_checkint(L,2));
+	return 0;
+};
+static int luags_CallRoomScript(lua_State *L) {
+	AGS_CallRoomScript((int)luaL_checkint(L,1));
+	return 0;
+};
+static int luags_RunAGSGame(lua_State *L) {
+	lua_pushinteger(L, AGS_RunAGSGame(luaL_checkstring(L,1), (int)luaL_checkint(L,2), (int)luaL_checkint(L,3)));
+	return 1;
+};
+static int luags_GetTranslation(lua_State *L) {
+	lua_pushstring(L, AGS_GetTranslation(luaL_checkstring(L,1)));
+	return 1;
+};
+static int luags_IsTranslationAvailable(lua_State *L) {
+	lua_pushinteger(L, AGS_IsTranslationAvailable());
+	return 1;
+};
+static int luags_RestoreGameDialog(lua_State *L) {
+	AGS_RestoreGameDialog();
+	return 0;
+};
+static int luags_SaveGameDialog(lua_State *L) {
+	AGS_SaveGameDialog();
+	return 0;
+};
+static int luags_RestartGame(lua_State *L) {
+	AGS_RestartGame();
+	return 0;
+};
+static int luags_SaveGameSlot(lua_State *L) {
+	AGS_SaveGameSlot((int)luaL_checkint(L,1), luaL_checkstring(L,2));
+	return 0;
+};
+static int luags_RestoreGameSlot(lua_State *L) {
+	AGS_RestoreGameSlot((int)luaL_checkint(L,1));
+	return 0;
+};
+static int luags_DeleteSaveSlot(lua_State *L) {
+	AGS_DeleteSaveSlot((int)luaL_checkint(L,1));
+	return 0;
+};
+static int luags_SetRestartPoint(lua_State *L) {
+	AGS_SetRestartPoint();
+	return 0;
+};
+static int luags_GetLocationType(lua_State *L) {
+	luags_pushLocationType(L, AGS_GetLocationType((int)luaL_checkint(L,1), (int)luaL_checkint(L,2)));
+	return 1;
+};
+static int luags_GetWalkableAreaAt(lua_State *L) {
+	lua_pushinteger(L, AGS_GetWalkableAreaAt((int)luaL_checkint(L,1), (int)luaL_checkint(L,2)));
+	return 1;
+};
+static int luags_GetScalingAt(lua_State *L) {
+	lua_pushinteger(L, AGS_GetScalingAt((int)luaL_checkint(L,1), (int)luaL_checkint(L,2)));
+	return 1;
+};
+static int luags_GetRoomProperty(lua_State *L) {
+	lua_pushinteger(L, AGS_GetRoomProperty(luaL_checkstring(L,1)));
+	return 1;
+};
+static int luags_SetViewport(lua_State *L) {
+	AGS_SetViewport((int)luaL_checkint(L,1), (int)luaL_checkint(L,2));
+	return 0;
+};
+static int luags_ReleaseViewport(lua_State *L) {
+	AGS_ReleaseViewport();
+	return 0;
+};
+static int luags_GetViewportX(lua_State *L) {
+	lua_pushinteger(L, AGS_GetViewportX());
+	return 1;
+};
+static int luags_GetViewportY(lua_State *L) {
+	lua_pushinteger(L, AGS_GetViewportY());
+	return 1;
+};
+static int luags_IsGamePaused(lua_State *L) {
+	lua_pushboolean(L, AGS_IsGamePaused());
+	return 1;
+};
+static int luags_GetGraphicalVariable(lua_State *L) {
+	lua_pushinteger(L, AGS_GetGraphicalVariable(luaL_checkstring(L,1)));
+	return 1;
+};
+static int luags_SetGraphicalVariable(lua_State *L) {
+	AGS_SetGraphicalVariable(luaL_checkstring(L,1), (int)luaL_checkint(L,2));
+	return 0;
+};
+static int luags_DisableInterface(lua_State *L) {
+	AGS_DisableInterface();
+	return 0;
+};
+static int luags_EnableInterface(lua_State *L) {
+	AGS_EnableInterface();
+	return 0;
+};
+static int luags_IsInterfaceEnabled(lua_State *L) {
+	lua_pushinteger(L, AGS_IsInterfaceEnabled());
+	return 1;
+};
+static int luags_Said(lua_State *L) {
+	lua_pushinteger(L, AGS_Said(luaL_checkstring(L,1)));
+	return 1;
+};
+static int luags_GetTextWidth(lua_State *L) {
+	lua_pushinteger(L, AGS_GetTextWidth(luaL_checkstring(L,1), luags_checkFontType(L,2)));
+	return 1;
+};
+static int luags_GetTextHeight(lua_State *L) {
+	lua_pushinteger(L, AGS_GetTextHeight(luaL_checkstring(L,1), luags_checkFontType(L,2), (int)luaL_checkint(L,3)));
+	return 1;
+};
+static int luags_GiveScore(lua_State *L) {
+	AGS_GiveScore((int)luaL_checkint(L,1));
+	return 0;
+};
+static int luags_UpdateInventory(lua_State *L) {
+	AGS_UpdateInventory();
+	return 0;
+};
+static int luags_StopDialog(lua_State *L) {
+	AGS_StopDialog();
+	return 0;
+};
+static int luags_AreThingsOverlapping(lua_State *L) {
+	lua_pushinteger(L, AGS_AreThingsOverlapping((int)luaL_checkint(L,1), (int)luaL_checkint(L,2)));
+	return 1;
+};
+static int luags_SetVoiceMode(lua_State *L) {
+	AGS_SetVoiceMode(luags_checkeVoiceMode(L,1));
+	return 0;
+};
+static int luags_SetSkipSpeech(lua_State *L) {
+	AGS_SetSkipSpeech((int)luaL_checkint(L,1));
+	return 0;
+};
+static int luags_SetSpeechStyle(lua_State *L) {
+	AGS_SetSpeechStyle(luags_checkeSpeechStyle(L,1));
+	return 0;
+};
+static int luags_SetTimer(lua_State *L) {
+	AGS_SetTimer((int)luaL_checkint(L,1), (int)luaL_checkint(L,2));
+	return 0;
+};
+static int luags_IsTimerExpired(lua_State *L) {
+	lua_pushboolean(L, AGS_IsTimerExpired((int)luaL_checkint(L,1)));
+	return 1;
+};
+static int luags_SetMultitaskingMode(lua_State *L) {
+	AGS_SetMultitaskingMode((int)luaL_checkint(L,1));
+	return 0;
+};
+static int luags_FloatToInt(lua_State *L) {
+	lua_pushinteger(L, AGS_FloatToInt(luags_checkscriptfloat(L,1), (int)luaL_optint(L,2,AGS_eRoundDown)));
+	return 1;
+};
+static int luags_IntToFloat(lua_State *L) {
+	luags_pushscriptfloat(L, AGS_IntToFloat((int)luaL_checkint(L,1)));
+	return 1;
+};
+static int luags_FadeIn(lua_State *L) {
+	AGS_FadeIn((int)luaL_checkint(L,1));
+	return 0;
+};
+static int luags_FadeOut(lua_State *L) {
+	AGS_FadeOut((int)luaL_checkint(L,1));
+	return 0;
+};
+static int luags_CyclePalette(lua_State *L) {
+	AGS_CyclePalette((int)luaL_checkint(L,1), (int)luaL_checkint(L,2));
+	return 0;
+};
+static int luags_SetPalRGB(lua_State *L) {
+	AGS_SetPalRGB((int)luaL_checkint(L,1), (int)luaL_checkint(L,2), (int)luaL_checkint(L,3), (int)luaL_checkint(L,4));
+	return 0;
+};
+static int luags_UpdatePalette(lua_State *L) {
+	AGS_UpdatePalette();
+	return 0;
+};
+static int luags_TintScreen(lua_State *L) {
+	AGS_TintScreen((int)luaL_checkint(L,1), (int)luaL_checkint(L,2), (int)luaL_checkint(L,3));
+	return 0;
+};
+static int luags_SetAmbientTint(lua_State *L) {
+	AGS_SetAmbientTint((int)luaL_checkint(L,1), (int)luaL_checkint(L,2), (int)luaL_checkint(L,3), (int)luaL_checkint(L,4), (int)luaL_checkint(L,5));
+	return 0;
+};
+static int luags_Random(lua_State *L) {
+	lua_pushinteger(L, AGS_Random((int)luaL_checkint(L,1)));
+	return 1;
+};
+static int luags_SetBackgroundFrame(lua_State *L) {
+	AGS_SetBackgroundFrame((int)luaL_checkint(L,1));
+	return 0;
+};
+static int luags_GetBackgroundFrame(lua_State *L) {
+	lua_pushinteger(L, AGS_GetBackgroundFrame());
+	return 1;
+};
+static int luags_ShakeScreen(lua_State *L) {
+	AGS_ShakeScreen((int)luaL_checkint(L,1));
+	return 0;
+};
+static int luags_ShakeScreenBackground(lua_State *L) {
+	AGS_ShakeScreenBackground((int)luaL_checkint(L,1), (int)luaL_checkint(L,2), (int)luaL_checkint(L,3));
+	return 0;
+};
+static int luags_SetScreenTransition(lua_State *L) {
+	AGS_SetScreenTransition(luags_checkTransitionStyle(L,1));
+	return 0;
+};
+static int luags_SetNextScreenTransition(lua_State *L) {
+	AGS_SetNextScreenTransition(luags_checkTransitionStyle(L,1));
+	return 0;
+};
+static int luags_SetFadeColor(lua_State *L) {
+	AGS_SetFadeColor((int)luaL_checkint(L,1), (int)luaL_checkint(L,2), (int)luaL_checkint(L,3));
+	return 0;
+};
+static int luags_IsInteractionAvailable(lua_State *L) {
+	lua_pushinteger(L, AGS_IsInteractionAvailable((int)luaL_checkint(L,1), (int)luaL_checkint(L,2), luags_checkCursorMode(L,3)));
+	return 1;
+};
+static int luags_RemoveWalkableArea(lua_State *L) {
+	AGS_RemoveWalkableArea((int)luaL_checkint(L,1));
+	return 0;
+};
+static int luags_RestoreWalkableArea(lua_State *L) {
+	AGS_RestoreWalkableArea((int)luaL_checkint(L,1));
+	return 0;
+};
+static int luags_SetAreaScaling(lua_State *L) {
+	AGS_SetAreaScaling((int)luaL_checkint(L,1), (int)luaL_checkint(L,2), (int)luaL_checkint(L,3));
+	return 0;
+};
+static int luags_DisableGroundLevelAreas(lua_State *L) {
+	AGS_DisableGroundLevelAreas((int)luaL_checkint(L,1));
+	return 0;
+};
+static int luags_EnableGroundLevelAreas(lua_State *L) {
+	AGS_EnableGroundLevelAreas();
+	return 0;
+};
+static int luags_SetWalkBehindBase(lua_State *L) {
+	AGS_SetWalkBehindBase((int)luaL_checkint(L,1), (int)luaL_checkint(L,2));
+	return 0;
+};
+static int luags_CDAudio(lua_State *L) {
+	lua_pushinteger(L, AGS_CDAudio(luags_checkeCDAudioFunction(L,1), (int)luaL_checkint(L,2)));
+	return 1;
+};
+static int luags_PlayFlic(lua_State *L) {
+	AGS_PlayFlic((int)luaL_checkint(L,1), (int)luaL_checkint(L,2));
+	return 0;
+};
+static int luags_PlayVideo(lua_State *L) {
+	AGS_PlayVideo(luaL_checkstring(L,1), luags_checkVideoSkipStyle(L,2), (int)luaL_checkint(L,3));
+	return 0;
+};
+static int luags_PlayMusic(lua_State *L) {
+	AGS_PlayMusic((int)luaL_checkint(L,1));
+	return 0;
+};
+static int luags_PlayMusicQueued(lua_State *L) {
+	AGS_PlayMusicQueued((int)luaL_checkint(L,1));
+	return 0;
+};
+static int luags_PlaySilentMIDI(lua_State *L) {
+	AGS_PlaySilentMIDI((int)luaL_checkint(L,1));
+	return 0;
+};
+static int luags_PlayMP3File(lua_State *L) {
+	AGS_PlayMP3File(luaL_checkstring(L,1));
+	return 0;
+};
+static int luags_PlaySound(lua_State *L) {
+	lua_pushinteger(L, AGS_PlaySound((int)luaL_checkint(L,1)));
+	return 1;
+};
+static int luags_PlaySoundEx(lua_State *L) {
+	AGS_PlaySoundEx((int)luaL_checkint(L,1), (int)luaL_checkint(L,2));
+	return 0;
+};
+static int luags_PlayAmbientSound(lua_State *L) {
+	AGS_PlayAmbientSound((int)luaL_checkint(L,1), (int)luaL_checkint(L,2), (int)luaL_checkint(L,3), (int)luaL_checkint(L,4), (int)luaL_checkint(L,5));
+	return 0;
+};
+static int luags_StopAmbientSound(lua_State *L) {
+	AGS_StopAmbientSound((int)luaL_checkint(L,1));
+	return 0;
+};
+static int luags_GetCurrentMusic(lua_State *L) {
+	lua_pushinteger(L, AGS_GetCurrentMusic());
+	return 1;
+};
+static int luags_SetMusicRepeat(lua_State *L) {
+	AGS_SetMusicRepeat((int)luaL_checkint(L,1));
+	return 0;
+};
+static int luags_SetMusicVolume(lua_State *L) {
+	AGS_SetMusicVolume((int)luaL_checkint(L,1));
+	return 0;
+};
+static int luags_SetSoundVolume(lua_State *L) {
+	AGS_SetSoundVolume((int)luaL_checkint(L,1));
+	return 0;
+};
+static int luags_SetMusicMasterVolume(lua_State *L) {
+	AGS_SetMusicMasterVolume((int)luaL_checkint(L,1));
+	return 0;
+};
+static int luags_SetDigitalMasterVolume(lua_State *L) {
+	AGS_SetDigitalMasterVolume((int)luaL_checkint(L,1));
+	return 0;
+};
+static int luags_SeekMODPattern(lua_State *L) {
+	AGS_SeekMODPattern((int)luaL_checkint(L,1));
+	return 0;
+};
+static int luags_IsChannelPlaying(lua_State *L) {
+	lua_pushinteger(L, AGS_IsChannelPlaying((int)luaL_checkint(L,1)));
+	return 1;
+};
+static int luags_IsSoundPlaying(lua_State *L) {
+	lua_pushinteger(L, AGS_IsSoundPlaying());
+	return 1;
+};
+static int luags_IsMusicPlaying(lua_State *L) {
+	lua_pushinteger(L, AGS_IsMusicPlaying());
+	return 1;
+};
+static int luags_GetMIDIPosition(lua_State *L) {
+	lua_pushinteger(L, AGS_GetMIDIPosition());
+	return 1;
+};
+static int luags_SeekMIDIPosition(lua_State *L) {
+	AGS_SeekMIDIPosition((int)luaL_checkint(L,1));
+	return 0;
+};
+static int luags_GetMP3PosMillis(lua_State *L) {
+	lua_pushinteger(L, AGS_GetMP3PosMillis());
+	return 1;
+};
+static int luags_SeekMP3PosMillis(lua_State *L) {
+	AGS_SeekMP3PosMillis((int)luaL_checkint(L,1));
+	return 0;
+};
+static int luags_SetChannelVolume(lua_State *L) {
+	AGS_SetChannelVolume((int)luaL_checkint(L,1), (int)luaL_checkint(L,2));
+	return 0;
+};
+static int luags_StopChannel(lua_State *L) {
+	AGS_StopChannel((int)luaL_checkint(L,1));
+	return 0;
+};
+static int luags_StopMusic(lua_State *L) {
+	AGS_StopMusic();
+	return 0;
+};
+static int luags_IsVoxAvailable(lua_State *L) {
+	lua_pushinteger(L, AGS_IsVoxAvailable());
+	return 1;
+};
+static int luags_SetSpeechVolume(lua_State *L) {
+	AGS_SetSpeechVolume((int)luaL_checkint(L,1));
+	return 0;
+};
+static int luags_IsMusicVoxAvailable(lua_State *L) {
+	lua_pushinteger(L, AGS_IsMusicVoxAvailable());
+	return 1;
+};
+static int luags_SaveScreenShot(lua_State *L) {
+	lua_pushinteger(L, AGS_SaveScreenShot(luaL_checkstring(L,1)));
+	return 1;
+};
+static int luags_PauseGame(lua_State *L) {
+	AGS_PauseGame();
+	return 0;
+};
+static int luags_UnPauseGame(lua_State *L) {
+	AGS_UnPauseGame();
+	return 0;
+};
+static int luags_Wait(lua_State *L) {
+	AGS_Wait((int)luaL_checkint(L,1));
+	return 0;
+};
+static int luags_WaitKey(lua_State *L) {
+	lua_pushinteger(L, AGS_WaitKey((int)luaL_checkint(L,1)));
+	return 1;
+};
+static int luags_WaitMouseKey(lua_State *L) {
+	lua_pushinteger(L, AGS_WaitMouseKey((int)luaL_checkint(L,1)));
+	return 1;
+};
+static int luags_IsKeyPressed(lua_State *L) {
+	lua_pushboolean(L, AGS_IsKeyPressed(luags_checkeKeyCode(L,1)));
+	return 1;
+};
+static int luags_SetGlobalInt(lua_State *L) {
+	AGS_SetGlobalInt((int)luaL_checkint(L,1), (int)luaL_checkint(L,2));
+	return 0;
+};
+static int luags_GetGlobalInt(lua_State *L) {
+	lua_pushinteger(L, AGS_GetGlobalInt((int)luaL_checkint(L,1)));
+	return 1;
+};
+static int luags_FlipScreen(lua_State *L) {
+	AGS_FlipScreen((int)luaL_checkint(L,1));
+	return 0;
+};
+static int luags_SkipUntilCharacterStops(lua_State *L) {
+	AGS_SkipUntilCharacterStops(luags_checkCHARID(L,1));
+	return 0;
+};
+static int luags_StartCutscene(lua_State *L) {
+	AGS_StartCutscene(luags_checkCutsceneSkipType(L,1));
+	return 0;
+};
+static int luags_EndCutscene(lua_State *L) {
+	lua_pushinteger(L, AGS_EndCutscene());
+	return 1;
+};
+static int luags_ClaimEvent(lua_State *L) {
+	AGS_ClaimEvent();
+	return 0;
+};
+static int luags_SetTextWindowGUI(lua_State *L) {
+	AGS_SetTextWindowGUI((int)luaL_checkint(L,1));
+	return 0;
+};
+static int luags_FindGUIID(lua_State *L) {
+	lua_pushinteger(L, AGS_FindGUIID(luaL_checkstring(L,1)));
+	return 1;
+};
+
+int luaopen_ags(lua_State *L) {
+	int IDX_LIB, IDX_LIB_META;
+	luaL_register(L, "ags", llh_null_lib);
+	IDX_LIB = lua_gettop(L);
+	lua_newtable(L);
+	IDX_LIB_META = lua_gettop(L);
+	lua_pushvalue(L, IDX_LIB_META);
+	lua_setmetatable(L, IDX_LIB);
+	lua_getglobal(L, "agsinternal");
+	lua_getfield(L, -1, "initlib");
+	lua_pushvalue(L, IDX_LIB);
+	lua_pushvalue(L, IDX_LIB_META);
+	lua_call(L,2,0);
+	lua_pop(L,1); // agsinternal
+	
+	#define ADD_GLOBALFUNC(name) { if (AGS_##name) { lua_pushliteral(L,#name); lua_pushcfunction(L,luags_##name); lua_rawset(L, IDX_LIB); } }
+	ADD_GLOBALFUNC(Display);
+	ADD_GLOBALFUNC(DisplayAt);
+	ADD_GLOBALFUNC(DisplayAtY);
+	ADD_GLOBALFUNC(DisplayMessage);
+	ADD_GLOBALFUNC(DisplayMessageAtY);
+	ADD_GLOBALFUNC(DisplayTopBar);
+	ADD_GLOBALFUNC(DisplayMessageBar);
+	ADD_GLOBALFUNC(ResetRoom);
+	ADD_GLOBALFUNC(HasPlayerBeenInRoom);
+	ADD_GLOBALFUNC(ProcessClick);
+	ADD_GLOBALFUNC(AbortGame);
+	ADD_GLOBALFUNC(QuitGame);
+	ADD_GLOBALFUNC(SetGameSpeed);
+	ADD_GLOBALFUNC(GetGameSpeed);
+	ADD_GLOBALFUNC(SetGameOption);
+	ADD_GLOBALFUNC(GetGameOption);
+	ADD_GLOBALFUNC(Debug);
+	ADD_GLOBALFUNC(CallRoomScript);
+	ADD_GLOBALFUNC(RunAGSGame);
+	ADD_GLOBALFUNC(GetTranslation);
+	ADD_GLOBALFUNC(IsTranslationAvailable);
+	ADD_GLOBALFUNC(RestoreGameDialog);
+	ADD_GLOBALFUNC(SaveGameDialog);
+	ADD_GLOBALFUNC(RestartGame);
+	ADD_GLOBALFUNC(SaveGameSlot);
+	ADD_GLOBALFUNC(RestoreGameSlot);
+	ADD_GLOBALFUNC(DeleteSaveSlot);
+	ADD_GLOBALFUNC(SetRestartPoint);
+	ADD_GLOBALFUNC(GetLocationType);
+	ADD_GLOBALFUNC(GetWalkableAreaAt);
+	ADD_GLOBALFUNC(GetScalingAt);
+	ADD_GLOBALFUNC(GetRoomProperty);
+	ADD_GLOBALFUNC(SetViewport);
+	ADD_GLOBALFUNC(ReleaseViewport);
+	ADD_GLOBALFUNC(GetViewportX);
+	ADD_GLOBALFUNC(GetViewportY);
+	ADD_GLOBALFUNC(IsGamePaused);
+	ADD_GLOBALFUNC(GetGraphicalVariable);
+	ADD_GLOBALFUNC(SetGraphicalVariable);
+	ADD_GLOBALFUNC(DisableInterface);
+	ADD_GLOBALFUNC(EnableInterface);
+	ADD_GLOBALFUNC(IsInterfaceEnabled);
+	ADD_GLOBALFUNC(Said);
+	ADD_GLOBALFUNC(GetTextWidth);
+	ADD_GLOBALFUNC(GetTextHeight);
+	ADD_GLOBALFUNC(GiveScore);
+	ADD_GLOBALFUNC(UpdateInventory);
+	ADD_GLOBALFUNC(StopDialog);
+	ADD_GLOBALFUNC(AreThingsOverlapping);
+	ADD_GLOBALFUNC(SetVoiceMode);
+	ADD_GLOBALFUNC(SetSkipSpeech);
+	ADD_GLOBALFUNC(SetSpeechStyle);
+	ADD_GLOBALFUNC(SetTimer);
+	ADD_GLOBALFUNC(IsTimerExpired);
+	ADD_GLOBALFUNC(SetMultitaskingMode);
+	ADD_GLOBALFUNC(FloatToInt);
+	ADD_GLOBALFUNC(IntToFloat);
+	ADD_GLOBALFUNC(FadeIn);
+	ADD_GLOBALFUNC(FadeOut);
+	ADD_GLOBALFUNC(CyclePalette);
+	ADD_GLOBALFUNC(SetPalRGB);
+	ADD_GLOBALFUNC(UpdatePalette);
+	ADD_GLOBALFUNC(TintScreen);
+	ADD_GLOBALFUNC(SetAmbientTint);
+	ADD_GLOBALFUNC(Random);
+	ADD_GLOBALFUNC(SetBackgroundFrame);
+	ADD_GLOBALFUNC(GetBackgroundFrame);
+	ADD_GLOBALFUNC(ShakeScreen);
+	ADD_GLOBALFUNC(ShakeScreenBackground);
+	ADD_GLOBALFUNC(SetScreenTransition);
+	ADD_GLOBALFUNC(SetNextScreenTransition);
+	ADD_GLOBALFUNC(SetFadeColor);
+	ADD_GLOBALFUNC(IsInteractionAvailable);
+	ADD_GLOBALFUNC(RemoveWalkableArea);
+	ADD_GLOBALFUNC(RestoreWalkableArea);
+	ADD_GLOBALFUNC(SetAreaScaling);
+	ADD_GLOBALFUNC(DisableGroundLevelAreas);
+	ADD_GLOBALFUNC(EnableGroundLevelAreas);
+	ADD_GLOBALFUNC(SetWalkBehindBase);
+	ADD_GLOBALFUNC(CDAudio);
+	ADD_GLOBALFUNC(PlayFlic);
+	ADD_GLOBALFUNC(PlayVideo);
+	ADD_GLOBALFUNC(PlayMusic);
+	ADD_GLOBALFUNC(PlayMusicQueued);
+	ADD_GLOBALFUNC(PlaySilentMIDI);
+	ADD_GLOBALFUNC(PlayMP3File);
+	ADD_GLOBALFUNC(PlaySound);
+	ADD_GLOBALFUNC(PlaySoundEx);
+	ADD_GLOBALFUNC(PlayAmbientSound);
+	ADD_GLOBALFUNC(StopAmbientSound);
+	ADD_GLOBALFUNC(GetCurrentMusic);
+	ADD_GLOBALFUNC(SetMusicRepeat);
+	ADD_GLOBALFUNC(SetMusicVolume);
+	ADD_GLOBALFUNC(SetSoundVolume);
+	ADD_GLOBALFUNC(SetMusicMasterVolume);
+	ADD_GLOBALFUNC(SetDigitalMasterVolume);
+	ADD_GLOBALFUNC(SeekMODPattern);
+	ADD_GLOBALFUNC(IsChannelPlaying);
+	ADD_GLOBALFUNC(IsSoundPlaying);
+	ADD_GLOBALFUNC(IsMusicPlaying);
+	ADD_GLOBALFUNC(GetMIDIPosition);
+	ADD_GLOBALFUNC(SeekMIDIPosition);
+	ADD_GLOBALFUNC(GetMP3PosMillis);
+	ADD_GLOBALFUNC(SeekMP3PosMillis);
+	ADD_GLOBALFUNC(SetChannelVolume);
+	ADD_GLOBALFUNC(StopChannel);
+	ADD_GLOBALFUNC(StopMusic);
+	ADD_GLOBALFUNC(IsVoxAvailable);
+	ADD_GLOBALFUNC(SetSpeechVolume);
+	ADD_GLOBALFUNC(IsMusicVoxAvailable);
+	ADD_GLOBALFUNC(SaveScreenShot);
+	ADD_GLOBALFUNC(PauseGame);
+	ADD_GLOBALFUNC(UnPauseGame);
+	ADD_GLOBALFUNC(Wait);
+	ADD_GLOBALFUNC(WaitKey);
+	ADD_GLOBALFUNC(WaitMouseKey);
+	ADD_GLOBALFUNC(IsKeyPressed);
+	ADD_GLOBALFUNC(SetGlobalInt);
+	ADD_GLOBALFUNC(GetGlobalInt);
+	ADD_GLOBALFUNC(FlipScreen);
+	ADD_GLOBALFUNC(SkipUntilCharacterStops);
+	ADD_GLOBALFUNC(StartCutscene);
+	ADD_GLOBALFUNC(EndCutscene);
+	ADD_GLOBALFUNC(ClaimEvent);
+	ADD_GLOBALFUNC(SetTextWindowGUI);
+	ADD_GLOBALFUNC(FindGUIID);
+	#undef ADD_GLOBALFUNC
+	
+	#define ADD_CONSTANT(name) { lua_pushliteral(L, #name); lua_pushinteger(L, AGS_##name); lua_rawset(L, IDX_LIB); }
+	ADD_CONSTANT(MAX_INV);
+	ADD_CONSTANT(FOLLOW_EXACTLY);
+	ADD_CONSTANT(NARRATOR);
+	ADD_CONSTANT(OPT_WALKONLOOK);
+	ADD_CONSTANT(OPT_DIALOGOPTIONSGUI);
+	ADD_CONSTANT(OPT_ANTIGLIDE);
+	ADD_CONSTANT(OPT_DIALOGOPTIONSGAP);
+	ADD_CONSTANT(OPT_WHENGUIDISABLED);
+	ADD_CONSTANT(OPT_ALWAYSSPEECH);
+	ADD_CONSTANT(OPT_PIXELPERFECT);
+	ADD_CONSTANT(OPT_NOWALKMODE);
+	ADD_CONSTANT(OPT_FIXEDINVCURSOR);
+	ADD_CONSTANT(OPT_DONTLOSEINV);
+	ADD_CONSTANT(OPT_TURNBEFOREWALK);
+	ADD_CONSTANT(OPT_HANDLEINVCLICKS);
+	ADD_CONSTANT(OPT_MOUSEWHEEL);
+	ADD_CONSTANT(OPT_DIALOGNUMBERED);
+	ADD_CONSTANT(OPT_DIALOGUPWARDS);
+	ADD_CONSTANT(OPT_CROSSFADEMUSIC);
+	ADD_CONSTANT(OPT_ANTIALIASFONTS);
+	ADD_CONSTANT(OPT_THOUGHTGUI);
+	ADD_CONSTANT(OPT_TURNWHENFACING);
+	ADD_CONSTANT(OPT_RIGHTTOLEFT);
+	ADD_CONSTANT(OPT_MULTIPLEINV);
+	ADD_CONSTANT(OPT_SAVEGAMESCREENSHOTS);
+	ADD_CONSTANT(OPT_PORTRAITPOSITION);
+	ADD_CONSTANT(OPT_LIPSYNCTEXT);
+	ADD_CONSTANT(COLOR_TRANSPARENT);
+	ADD_CONSTANT(DIALOG_PARSER_SELECTED);
+	ADD_CONSTANT(RUN_DIALOG_RETURN);
+	ADD_CONSTANT(RUN_DIALOG_STOP_DIALOG);
+	ADD_CONSTANT(RUN_DIALOG_GOTO_PREVIOUS);
+	ADD_CONSTANT(eOSDOS);
+	ADD_CONSTANT(eOSWindows);
+	ADD_CONSTANT(eOSLinux);
+	ADD_CONSTANT(eOSMacOS);
+	ADD_CONSTANT(eTransitionFade);
+	ADD_CONSTANT(eTransitionInstant);
+	ADD_CONSTANT(eTransitionDissolve);
+	ADD_CONSTANT(eTransitionBoxout);
+	ADD_CONSTANT(eTransitionCrossfade);
+	ADD_CONSTANT(eMouseLeft);
+	ADD_CONSTANT(eMouseRight);
+	ADD_CONSTANT(eMouseMiddle);
+	ADD_CONSTANT(eMouseLeftInv);
+	ADD_CONSTANT(eMouseRightInv);
+	ADD_CONSTANT(eMouseMiddleInv);
+	ADD_CONSTANT(eMouseWheelNorth);
+	ADD_CONSTANT(eMouseWheelSouth);
+	ADD_CONSTANT(eRoundDown);
+	ADD_CONSTANT(eRoundNearest);
+	ADD_CONSTANT(eRoundUp);
+	ADD_CONSTANT(eOnce);
+	ADD_CONSTANT(eRepeat);
+	ADD_CONSTANT(eAlignLeft);
+	ADD_CONSTANT(eAlignCentre);
+	ADD_CONSTANT(eAlignRight);
+	ADD_CONSTANT(eLocationNothing);
+	ADD_CONSTANT(eLocationHotspot);
+	ADD_CONSTANT(eLocationCharacter);
+	ADD_CONSTANT(eLocationObject);
+	ADD_CONSTANT(eSkipESCOnly);
+	ADD_CONSTANT(eSkipAnyKey);
+	ADD_CONSTANT(eSkipMouseClick);
+	ADD_CONSTANT(eSkipAnyKeyOrMouseClick);
+	ADD_CONSTANT(eSkipESCOrRightButton);
+	ADD_CONSTANT(eOptionOff);
+	ADD_CONSTANT(eOptionOn);
+	ADD_CONSTANT(eOptionOffForever);
+	ADD_CONSTANT(eSpeechLucasarts);
+	ADD_CONSTANT(eSpeechSierra);
+	ADD_CONSTANT(eSpeechSierraWithBackground);
+	ADD_CONSTANT(eSpeechFullScreen);
+	ADD_CONSTANT(eSpeechTextOnly);
+	ADD_CONSTANT(eSpeechVoiceAndText);
+	ADD_CONSTANT(eSpeechVoiceOnly);
+	ADD_CONSTANT(eFlipLeftToRight);
+	ADD_CONSTANT(eFlipUpsideDown);
+	ADD_CONSTANT(eFlipBoth);
+	ADD_CONSTANT(eCDIsDriverPresent);
+	ADD_CONSTANT(eCDGetPlayingStatus);
+	ADD_CONSTANT(eCDPlayTrack);
+	ADD_CONSTANT(eCDPausePlayback);
+	ADD_CONSTANT(eCDResumePlayback);
+	ADD_CONSTANT(eCDGetNumTracks);
+	ADD_CONSTANT(eCDEject);
+	ADD_CONSTANT(eCDCloseTray);
+	ADD_CONSTANT(eCDGetCDDriveCount);
+	ADD_CONSTANT(eCDSelectActiveCDDrive);
+	ADD_CONSTANT(eSayUseOptionSetting);
+	ADD_CONSTANT(eSayAlways);
+	ADD_CONSTANT(eSayNever);
+	ADD_CONSTANT(eVideoSkipNotAllowed);
+	ADD_CONSTANT(eVideoSkipEscKey);
+	ADD_CONSTANT(eVideoSkipAnyKey);
+	ADD_CONSTANT(eVideoSkipAnyKeyOrMouse);
+	ADD_CONSTANT(eKeyCtrlA);
+	ADD_CONSTANT(eKeyCtrlB);
+	ADD_CONSTANT(eKeyCtrlC);
+	ADD_CONSTANT(eKeyCtrlD);
+	ADD_CONSTANT(eKeyCtrlE);
+	ADD_CONSTANT(eKeyCtrlF);
+	ADD_CONSTANT(eKeyCtrlG);
+	ADD_CONSTANT(eKeyCtrlH);
+	ADD_CONSTANT(eKeyBackspace);
+	ADD_CONSTANT(eKeyCtrlI);
+	ADD_CONSTANT(eKeyTab);
+	ADD_CONSTANT(eKeyCtrlJ);
+	ADD_CONSTANT(eKeyCtrlK);
+	ADD_CONSTANT(eKeyCtrlL);
+	ADD_CONSTANT(eKeyCtrlM);
+	ADD_CONSTANT(eKeyReturn);
+	ADD_CONSTANT(eKeyCtrlN);
+	ADD_CONSTANT(eKeyCtrlO);
+	ADD_CONSTANT(eKeyCtrlP);
+	ADD_CONSTANT(eKeyCtrlQ);
+	ADD_CONSTANT(eKeyCtrlR);
+	ADD_CONSTANT(eKeyCtrlS);
+	ADD_CONSTANT(eKeyCtrlT);
+	ADD_CONSTANT(eKeyCtrlU);
+	ADD_CONSTANT(eKeyCtrlV);
+	ADD_CONSTANT(eKeyCtrlW);
+	ADD_CONSTANT(eKeyCtrlX);
+	ADD_CONSTANT(eKeyCtrlY);
+	ADD_CONSTANT(eKeyCtrlZ);
+	ADD_CONSTANT(eKeyEscape);
+	ADD_CONSTANT(eKeySpace);
+	ADD_CONSTANT(eKeyExclamationMark);
+	ADD_CONSTANT(eKeyDoubleQuote);
+	ADD_CONSTANT(eKeyHash);
+	ADD_CONSTANT(eKeyDollar);
+	ADD_CONSTANT(eKeyPercent);
+	ADD_CONSTANT(eKeyAmpersand);
+	ADD_CONSTANT(eKeySingleQuote);
+	ADD_CONSTANT(eKeyOpenParenthesis);
+	ADD_CONSTANT(eKeyCloseParenthesis);
+	ADD_CONSTANT(eKeyAsterisk);
+	ADD_CONSTANT(eKeyPlus);
+	ADD_CONSTANT(eKeyComma);
+	ADD_CONSTANT(eKeyHyphen);
+	ADD_CONSTANT(eKeyPeriod);
+	ADD_CONSTANT(eKeyForwardSlash);
+	ADD_CONSTANT(eKey0);
+	ADD_CONSTANT(eKey1);
+	ADD_CONSTANT(eKey2);
+	ADD_CONSTANT(eKey3);
+	ADD_CONSTANT(eKey4);
+	ADD_CONSTANT(eKey5);
+	ADD_CONSTANT(eKey6);
+	ADD_CONSTANT(eKey7);
+	ADD_CONSTANT(eKey8);
+	ADD_CONSTANT(eKey9);
+	ADD_CONSTANT(eKeyColon);
+	ADD_CONSTANT(eKeySemiColon);
+	ADD_CONSTANT(eKeyLessThan);
+	ADD_CONSTANT(eKeyEquals);
+	ADD_CONSTANT(eKeyGreaterThan);
+	ADD_CONSTANT(eKeyQuestionMark);
+	ADD_CONSTANT(eKeyAt);
+	ADD_CONSTANT(eKeyA);
+	ADD_CONSTANT(eKeyB);
+	ADD_CONSTANT(eKeyC);
+	ADD_CONSTANT(eKeyD);
+	ADD_CONSTANT(eKeyE);
+	ADD_CONSTANT(eKeyF);
+	ADD_CONSTANT(eKeyG);
+	ADD_CONSTANT(eKeyH);
+	ADD_CONSTANT(eKeyI);
+	ADD_CONSTANT(eKeyJ);
+	ADD_CONSTANT(eKeyK);
+	ADD_CONSTANT(eKeyL);
+	ADD_CONSTANT(eKeyM);
+	ADD_CONSTANT(eKeyN);
+	ADD_CONSTANT(eKeyO);
+	ADD_CONSTANT(eKeyP);
+	ADD_CONSTANT(eKeyQ);
+	ADD_CONSTANT(eKeyR);
+	ADD_CONSTANT(eKeyS);
+	ADD_CONSTANT(eKeyT);
+	ADD_CONSTANT(eKeyU);
+	ADD_CONSTANT(eKeyV);
+	ADD_CONSTANT(eKeyW);
+	ADD_CONSTANT(eKeyX);
+	ADD_CONSTANT(eKeyY);
+	ADD_CONSTANT(eKeyZ);
+	ADD_CONSTANT(eKeyOpenBracket);
+	ADD_CONSTANT(eKeyBackSlash);
+	ADD_CONSTANT(eKeyCloseBracket);
+	ADD_CONSTANT(eKeyUnderscore);
+	ADD_CONSTANT(eKeyF1);
+	ADD_CONSTANT(eKeyF2);
+	ADD_CONSTANT(eKeyF3);
+	ADD_CONSTANT(eKeyF4);
+	ADD_CONSTANT(eKeyF5);
+	ADD_CONSTANT(eKeyF6);
+	ADD_CONSTANT(eKeyF7);
+	ADD_CONSTANT(eKeyF8);
+	ADD_CONSTANT(eKeyF9);
+	ADD_CONSTANT(eKeyF10);
+	ADD_CONSTANT(eKeyHome);
+	ADD_CONSTANT(eKeyUpArrow);
+	ADD_CONSTANT(eKeyPageUp);
+	ADD_CONSTANT(eKeyLeftArrow);
+	ADD_CONSTANT(eKeyNumPad5);
+	ADD_CONSTANT(eKeyRightArrow);
+	ADD_CONSTANT(eKeyEnd);
+	ADD_CONSTANT(eKeyDownArrow);
+	ADD_CONSTANT(eKeyPageDown);
+	ADD_CONSTANT(eKeyInsert);
+	ADD_CONSTANT(eKeyDelete);
+	ADD_CONSTANT(eKeyF11);
+	ADD_CONSTANT(eKeyF12);
+	ADD_CONSTANT(eAudioFileOGG);
+	ADD_CONSTANT(eAudioFileMP3);
+	ADD_CONSTANT(eAudioFileWAV);
+	ADD_CONSTANT(eAudioFileVOC);
+	ADD_CONSTANT(eAudioFileMIDI);
+	ADD_CONSTANT(eAudioFileMOD);
+	ADD_CONSTANT(eAudioPriorityVeryLow);
+	ADD_CONSTANT(eAudioPriorityLow);
+	ADD_CONSTANT(eAudioPriorityNormal);
+	ADD_CONSTANT(eAudioPriorityHigh);
+	ADD_CONSTANT(eAudioPriorityVeryHigh);
+	ADD_CONSTANT(eFileRead);
+	ADD_CONSTANT(eFileWrite);
+	ADD_CONSTANT(eFileAppend);
+	ADD_CONSTANT(eEventLeaveRoom);
+	ADD_CONSTANT(eEventEnterRoomBeforeFadein);
+	ADD_CONSTANT(eEventGotScore);
+	ADD_CONSTANT(eEventGUIMouseDown);
+	ADD_CONSTANT(eEventGUIMouseUp);
+	ADD_CONSTANT(eEventAddInventory);
+	ADD_CONSTANT(eEventLoseInventory);
+	ADD_CONSTANT(eEventRestoreGame);
+	ADD_CONSTANT(eBlock);
+	ADD_CONSTANT(eNoBlock);
+	ADD_CONSTANT(eForwards);
+	ADD_CONSTANT(eBackwards);
+	ADD_CONSTANT(eAnywhere);
+	ADD_CONSTANT(eWalkableAreas);
+	#undef ADD_CONSTANT
+	
+	lua_settop(L,IDX_LIB);
+	return 1;
+};
+
+// ViewFrame Lua wrappers
+#define VIEWFRAME_UV_AUDIOCLIP_META lua_upvalueindex(1)
+#define VIEWFRAME_UV_AUDIOCLIP_STORE lua_upvalueindex(2)
+#define VIEWFRAME_UV_META lua_upvalueindex(3)
+#define VIEWFRAME_UV_STORE lua_upvalueindex(4)
+static int luags_ViewFrame_get_Flipped(lua_State *L) {
+	AGS_ViewFrame* self = luags_checkViewFrame(L, 1, VIEWFRAME_UV_META);
+	lua_pushboolean(L, AGS_ViewFrame_get_Flipped(self));
+	return 1;
+};
+static int luags_ViewFrame_get_Frame(lua_State *L) {
+	AGS_ViewFrame* self = luags_checkViewFrame(L, 1, VIEWFRAME_UV_META);
+	lua_pushinteger(L, AGS_ViewFrame_get_Frame(self));
+	return 1;
+};
+static int luags_ViewFrame_get_Graphic(lua_State *L) {
+	AGS_ViewFrame* self = luags_checkViewFrame(L, 1, VIEWFRAME_UV_META);
+	lua_pushinteger(L, AGS_ViewFrame_get_Graphic(self));
+	return 1;
+};
+static int luags_ViewFrame_set_Graphic(lua_State *L) {
+	AGS_ViewFrame* self = luags_checkViewFrame(L, 1, VIEWFRAME_UV_META);
+	AGS_ViewFrame_set_Graphic(self, (int)luaL_checkint(L,2));
+	return 0;
+};
+static int luags_ViewFrame_get_LinkedAudio(lua_State *L) {
+	AGS_ViewFrame* self = luags_checkViewFrame(L, 1, VIEWFRAME_UV_META);
+	luags_pushAudioClip(L, AGS_ViewFrame_get_LinkedAudio(self), VIEWFRAME_UV_AUDIOCLIP_META, VIEWFRAME_UV_AUDIOCLIP_STORE);
+	return 1;
+};
+static int luags_ViewFrame_set_LinkedAudio(lua_State *L) {
+	AGS_ViewFrame* self = luags_checkViewFrame(L, 1, VIEWFRAME_UV_META);
+	AGS_ViewFrame_set_LinkedAudio(self, luags_checkAudioClip(L,2, VIEWFRAME_UV_AUDIOCLIP_META));
+	return 0;
+};
+static int luags_ViewFrame_get_Loop(lua_State *L) {
+	AGS_ViewFrame* self = luags_checkViewFrame(L, 1, VIEWFRAME_UV_META);
+	lua_pushinteger(L, AGS_ViewFrame_get_Loop(self));
+	return 1;
+};
+static int luags_ViewFrame_get_Sound(lua_State *L) {
+	AGS_ViewFrame* self = luags_checkViewFrame(L, 1, VIEWFRAME_UV_META);
+	lua_pushinteger(L, AGS_ViewFrame_get_Sound(self));
+	return 1;
+};
+static int luags_ViewFrame_set_Sound(lua_State *L) {
+	AGS_ViewFrame* self = luags_checkViewFrame(L, 1, VIEWFRAME_UV_META);
+	AGS_ViewFrame_set_Sound(self, (int)luaL_checkint(L,2));
+	return 0;
+};
+static int luags_ViewFrame_get_Speed(lua_State *L) {
+	AGS_ViewFrame* self = luags_checkViewFrame(L, 1, VIEWFRAME_UV_META);
+	lua_pushinteger(L, AGS_ViewFrame_get_Speed(self));
+	return 1;
+};
+static int luags_ViewFrame_get_View(lua_State *L) {
+	AGS_ViewFrame* self = luags_checkViewFrame(L, 1, VIEWFRAME_UV_META);
+	lua_pushinteger(L, AGS_ViewFrame_get_View(self));
+	return 1;
+};
+#undef VIEWFRAME_UV_AUDIOCLIP_META
+#undef VIEWFRAME_UV_AUDIOCLIP_STORE
+#undef VIEWFRAME_UV_META
+#undef VIEWFRAME_UV_STORE
+
+int luaopen_ags_ViewFrame(lua_State *L) {
+	int IDX_LIB, IDX_LIB_META;
+	int IDX_AUDIOCLIP_META;
+	int IDX_AUDIOCLIP_STORE;
+	int IDX_VIEWFRAME_META;
+	int IDX_VIEWFRAME_STORE;
+	luaL_register(L, "ags.ViewFrame", llh_null_lib);
+	IDX_LIB = lua_gettop(L);
+	lua_createtable(L,0,2);
+	IDX_LIB_META = lua_gettop(L);
+	lua_pushvalue(L,IDX_LIB_META);
+	lua_setmetatable(L,IDX_LIB);
+	luaL_newmetatable(L, "AGS_AudioClip*");
+	IDX_AUDIOCLIP_META = lua_gettop(L);
+	luaL_newmetatable(L, IMMORTAL_OBJECT_STORE);
+	IDX_AUDIOCLIP_STORE = lua_gettop(L);
+	luaL_newmetatable(L, "AGS_ViewFrame*");
+	IDX_VIEWFRAME_META = lua_gettop(L);
+	luaL_newmetatable(L, "AGS_ViewFrame* store");
+	IDX_VIEWFRAME_STORE = lua_gettop(L);
+	lua_getglobal(L, "agsinternal");
+	lua_getfield(L, -1, "initlib");
+	lua_pushvalue(L, IDX_LIB);
+	lua_pushvalue(L, IDX_LIB_META);
+	lua_pushvalue(L, IDX_VIEWFRAME_META);
+	lua_pushboolean(L, 1);
+	lua_call(L,4,0);
+	lua_pop(L,1); // agsinternal
+	luaL_newmetatable(L, "Weak");
+	lua_pushliteral(L, "__mode");
+	lua_pushliteral(L, "v");
+	lua_rawset(L,-3);
+	lua_setmetatable(L, IDX_VIEWFRAME_STORE);
+	lua_pushcfunction(L, AGS_Ephemeral__gc);
+	lua_setfield(L, IDX_VIEWFRAME_META, "__gc");
+	lua_pushvalue(L, IDX_VIEWFRAME_STORE);
+	lua_setfield(L, IDX_VIEWFRAME_META, "__store");
+	lua_getfield(L, LUA_REGISTRYINDEX, "agsinternal");
+	lua_getfield(L, -1, "persistephemeral");
+	lua_setfield(L, IDX_VIEWFRAME_META, "__persist");
+	lua_pop(L,1);
+	
+	#define ADD_MEMBER(name,f) { \
+		lua_pushliteral(L, #name); \
+		lua_pushvalue(L, IDX_AUDIOCLIP_META); \
+		lua_pushvalue(L, IDX_AUDIOCLIP_STORE); \
+		lua_pushvalue(L, IDX_VIEWFRAME_META); \
+		lua_pushvalue(L, IDX_VIEWFRAME_STORE); \
+		lua_pushcclosure(L, f, 4); \
+		lua_rawset(L, IDX_LIB); \
+	}
+	#define ADD_METHOD(name) { if (AGS_ViewFrame_##name) { ADD_MEMBER(name, luags_ViewFrame_##name); } }
+	ADD_METHOD(get_Flipped);
+	ADD_METHOD(get_Frame);
+	ADD_METHOD(get_Graphic);
+	ADD_METHOD(set_Graphic);
+	ADD_METHOD(get_LinkedAudio);
+	ADD_METHOD(set_LinkedAudio);
+	ADD_METHOD(get_Loop);
+	ADD_METHOD(get_Sound);
+	ADD_METHOD(set_Sound);
+	ADD_METHOD(get_Speed);
+	ADD_METHOD(get_View);
+	#undef ADD_METHOD
+	#undef ADD_MEMBER
+	
+	lua_settop(L,IDX_LIB);
+	return 1;
+};
+
+// DrawingSurface Lua wrappers
+#define DRAWINGSURFACE_UV_META lua_upvalueindex(1)
+#define DRAWINGSURFACE_UV_STORE lua_upvalueindex(2)
+static int luags_DrawingSurface_Clear(lua_State *L) {
+	AGS_DrawingSurface* self = luags_checkDrawingSurface(L, 1, DRAWINGSURFACE_UV_META);
+	AGS_DrawingSurface_Clear(self, (int)luaL_optint(L,2,-AGS_SCR_NO_VALUE));
+	return 0;
+};
+static int luags_DrawingSurface_CreateCopy(lua_State *L) {
+	AGS_DrawingSurface* self = luags_checkDrawingSurface(L, 1, DRAWINGSURFACE_UV_META);
+	luags_pushDrawingSurface(L, AGS_DrawingSurface_CreateCopy(self), DRAWINGSURFACE_UV_META, DRAWINGSURFACE_UV_STORE);
+	return 1;
+};
+static int luags_DrawingSurface_DrawCircle(lua_State *L) {
+	AGS_DrawingSurface* self = luags_checkDrawingSurface(L, 1, DRAWINGSURFACE_UV_META);
+	AGS_DrawingSurface_DrawCircle(self, (int)luaL_checkint(L,2), (int)luaL_checkint(L,3), (int)luaL_checkint(L,4));
+	return 0;
+};
+static int luags_DrawingSurface_DrawImage(lua_State *L) {
+	AGS_DrawingSurface* self = luags_checkDrawingSurface(L, 1, DRAWINGSURFACE_UV_META);
+	AGS_DrawingSurface_DrawImage(self, (int)luaL_checkint(L,2), (int)luaL_checkint(L,3), (int)luaL_checkint(L,4), (int)luaL_optint(L,5,0), (int)luaL_optint(L,6,AGS_SCR_NO_VALUE), (int)luaL_optint(L,7,AGS_SCR_NO_VALUE));
+	return 0;
+};
+static int luags_DrawingSurface_DrawLine(lua_State *L) {
+	AGS_DrawingSurface* self = luags_checkDrawingSurface(L, 1, DRAWINGSURFACE_UV_META);
+	AGS_DrawingSurface_DrawLine(self, (int)luaL_checkint(L,2), (int)luaL_checkint(L,3), (int)luaL_checkint(L,4), (int)luaL_checkint(L,5), (int)luaL_optint(L,6,1));
+	return 0;
+};
+static int luags_DrawingSurface_DrawMessageWrapped(lua_State *L) {
+	AGS_DrawingSurface* self = luags_checkDrawingSurface(L, 1, DRAWINGSURFACE_UV_META);
+	AGS_DrawingSurface_DrawMessageWrapped(self, (int)luaL_checkint(L,2), (int)luaL_checkint(L,3), (int)luaL_checkint(L,4), luags_checkFontType(L,5), (int)luaL_checkint(L,6));
+	return 0;
+};
+static int luags_DrawingSurface_DrawPixel(lua_State *L) {
+	AGS_DrawingSurface* self = luags_checkDrawingSurface(L, 1, DRAWINGSURFACE_UV_META);
+	AGS_DrawingSurface_DrawPixel(self, (int)luaL_checkint(L,2), (int)luaL_checkint(L,3));
+	return 0;
+};
+static int luags_DrawingSurface_DrawRectangle(lua_State *L) {
+	AGS_DrawingSurface* self = luags_checkDrawingSurface(L, 1, DRAWINGSURFACE_UV_META);
+	AGS_DrawingSurface_DrawRectangle(self, (int)luaL_checkint(L,2), (int)luaL_checkint(L,3), (int)luaL_checkint(L,4), (int)luaL_checkint(L,5));
+	return 0;
+};
+static int luags_DrawingSurface_DrawString(lua_State *L) {
+	AGS_DrawingSurface* self = luags_checkDrawingSurface(L, 1, DRAWINGSURFACE_UV_META);
+	aux_formatstring(L, 5);
+	AGS_DrawingSurface_DrawString(self, (int)luaL_checkint(L,2), (int)luaL_checkint(L,3), luags_checkFontType(L,4), lua_tostring(L,5));
+	return 0;
+};
+static int luags_DrawingSurface_DrawStringWrapped(lua_State *L) {
+	AGS_DrawingSurface* self = luags_checkDrawingSurface(L, 1, DRAWINGSURFACE_UV_META);
+	AGS_DrawingSurface_DrawStringWrapped(self, (int)luaL_checkint(L,2), (int)luaL_checkint(L,3), (int)luaL_checkint(L,4), luags_checkFontType(L,5), luags_checkAlignment(L,6), luaL_checkstring(L,7));
+	return 0;
+};
+static int luags_DrawingSurface_DrawSurface(lua_State *L) {
+	AGS_DrawingSurface* self = luags_checkDrawingSurface(L, 1, DRAWINGSURFACE_UV_META);
+	AGS_DrawingSurface_DrawSurface(self, luags_checkDrawingSurface(L,2, DRAWINGSURFACE_UV_META), (int)luaL_optint(L,3,0));
+	return 0;
+};
+static int luags_DrawingSurface_DrawTriangle(lua_State *L) {
+	AGS_DrawingSurface* self = luags_checkDrawingSurface(L, 1, DRAWINGSURFACE_UV_META);
+	AGS_DrawingSurface_DrawTriangle(self, (int)luaL_checkint(L,2), (int)luaL_checkint(L,3), (int)luaL_checkint(L,4), (int)luaL_checkint(L,5), (int)luaL_checkint(L,6), (int)luaL_checkint(L,7));
+	return 0;
+};
+static int luags_DrawingSurface_GetPixel(lua_State *L) {
+	AGS_DrawingSurface* self = luags_checkDrawingSurface(L, 1, DRAWINGSURFACE_UV_META);
+	lua_pushinteger(L, AGS_DrawingSurface_GetPixel(self, (int)luaL_checkint(L,2), (int)luaL_checkint(L,3)));
+	return 1;
+};
+static int luags_DrawingSurface_Release(lua_State *L) {
+	AGS_DrawingSurface* self = luags_checkDrawingSurface(L, 1, DRAWINGSURFACE_UV_META);
+	AGS_DrawingSurface_Release(self);
+	return 0;
+};
+static int luags_DrawingSurface_get_DrawingColor(lua_State *L) {
+	AGS_DrawingSurface* self = luags_checkDrawingSurface(L, 1, DRAWINGSURFACE_UV_META);
+	lua_pushinteger(L, AGS_DrawingSurface_get_DrawingColor(self));
+	return 1;
+};
+static int luags_DrawingSurface_set_DrawingColor(lua_State *L) {
+	AGS_DrawingSurface* self = luags_checkDrawingSurface(L, 1, DRAWINGSURFACE_UV_META);
+	AGS_DrawingSurface_set_DrawingColor(self, (int)luaL_checkint(L,2));
+	return 0;
+};
+static int luags_DrawingSurface_get_Height(lua_State *L) {
+	AGS_DrawingSurface* self = luags_checkDrawingSurface(L, 1, DRAWINGSURFACE_UV_META);
+	lua_pushinteger(L, AGS_DrawingSurface_get_Height(self));
+	return 1;
+};
+static int luags_DrawingSurface_get_UseHighResCoordinates(lua_State *L) {
+	AGS_DrawingSurface* self = luags_checkDrawingSurface(L, 1, DRAWINGSURFACE_UV_META);
+	lua_pushboolean(L, AGS_DrawingSurface_get_UseHighResCoordinates(self));
+	return 1;
+};
+static int luags_DrawingSurface_set_UseHighResCoordinates(lua_State *L) {
+	AGS_DrawingSurface* self = luags_checkDrawingSurface(L, 1, DRAWINGSURFACE_UV_META);
+	AGS_DrawingSurface_set_UseHighResCoordinates(self, llh_checkboolean(L,2));
+	return 0;
+};
+static int luags_DrawingSurface_get_Width(lua_State *L) {
+	AGS_DrawingSurface* self = luags_checkDrawingSurface(L, 1, DRAWINGSURFACE_UV_META);
+	lua_pushinteger(L, AGS_DrawingSurface_get_Width(self));
+	return 1;
+};
+#undef DRAWINGSURFACE_UV_META
+#undef DRAWINGSURFACE_UV_STORE
+
+int luaopen_ags_DrawingSurface(lua_State *L) {
+	int IDX_LIB, IDX_LIB_META;
+	int IDX_DRAWINGSURFACE_META;
+	int IDX_DRAWINGSURFACE_STORE;
+	luaL_register(L, "ags.DrawingSurface", llh_null_lib);
+	IDX_LIB = lua_gettop(L);
+	lua_createtable(L,0,2);
+	IDX_LIB_META = lua_gettop(L);
+	lua_pushvalue(L,IDX_LIB_META);
+	lua_setmetatable(L,IDX_LIB);
+	luaL_newmetatable(L, "AGS_DrawingSurface*");
+	IDX_DRAWINGSURFACE_META = lua_gettop(L);
+	luaL_newmetatable(L, "AGS_DrawingSurface* store");
+	IDX_DRAWINGSURFACE_STORE = lua_gettop(L);
+	lua_getglobal(L, "agsinternal");
+	lua_getfield(L, -1, "initlib");
+	lua_pushvalue(L, IDX_LIB);
+	lua_pushvalue(L, IDX_LIB_META);
+	lua_pushvalue(L, IDX_DRAWINGSURFACE_META);
+	lua_pushboolean(L, 1);
+	lua_call(L,4,0);
+	lua_pop(L,1); // agsinternal
+	luaL_newmetatable(L, "Weak");
+	lua_pushliteral(L, "__mode");
+	lua_pushliteral(L, "v");
+	lua_rawset(L,-3);
+	lua_setmetatable(L, IDX_DRAWINGSURFACE_STORE);
+	lua_pushcfunction(L, AGS_Ephemeral__gc);
+	lua_setfield(L, IDX_DRAWINGSURFACE_META, "__gc");
+	lua_pushvalue(L, IDX_DRAWINGSURFACE_STORE);
+	lua_setfield(L, IDX_DRAWINGSURFACE_META, "__store");
+	lua_getfield(L, LUA_REGISTRYINDEX, "agsinternal");
+	lua_getfield(L, -1, "persistephemeral");
+	lua_setfield(L, IDX_DRAWINGSURFACE_META, "__persist");
+	lua_pop(L,1);
+	
+	#define ADD_MEMBER(name,f) { \
+		lua_pushliteral(L, #name); \
+		lua_pushvalue(L, IDX_DRAWINGSURFACE_META); \
+		lua_pushvalue(L, IDX_DRAWINGSURFACE_STORE); \
+		lua_pushcclosure(L, f, 2); \
+		lua_rawset(L, IDX_LIB); \
+	}
+	#define ADD_METHOD(name) { if (AGS_DrawingSurface_##name) { ADD_MEMBER(name, luags_DrawingSurface_##name); } }
+	ADD_METHOD(Clear);
+	ADD_METHOD(CreateCopy);
+	ADD_METHOD(DrawCircle);
+	ADD_METHOD(DrawImage);
+	ADD_METHOD(DrawLine);
+	ADD_METHOD(DrawMessageWrapped);
+	ADD_METHOD(DrawPixel);
+	ADD_METHOD(DrawRectangle);
+	ADD_METHOD(DrawString);
+	ADD_METHOD(DrawStringWrapped);
+	ADD_METHOD(DrawSurface);
+	ADD_METHOD(DrawTriangle);
+	ADD_METHOD(GetPixel);
+	ADD_METHOD(Release);
+	ADD_METHOD(get_DrawingColor);
+	ADD_METHOD(set_DrawingColor);
+	ADD_METHOD(get_Height);
+	ADD_METHOD(get_UseHighResCoordinates);
+	ADD_METHOD(set_UseHighResCoordinates);
+	ADD_METHOD(get_Width);
+	#undef ADD_METHOD
+	#undef ADD_MEMBER
+	
+	lua_settop(L,IDX_LIB);
+	return 1;
+};
+
+// Room Lua wrappers
+#define ROOM_UV_DRAWINGSURFACE_META lua_upvalueindex(1)
+#define ROOM_UV_DRAWINGSURFACE_STORE lua_upvalueindex(2)
+static int luags_Room_GetTextProperty(lua_State *L) {
+	lua_pushstring(L, AGS_Room_GetTextProperty(luaL_checkstring(L,1)));
+	return 1;
+};
+static int luags_Room_GetDrawingSurfaceForBackground(lua_State *L) {
+	luags_pushDrawingSurface(L, AGS_Room_GetDrawingSurfaceForBackground((int)luaL_optint(L,1,AGS_SCR_NO_VALUE)), ROOM_UV_DRAWINGSURFACE_META, ROOM_UV_DRAWINGSURFACE_STORE);
+	return 1;
+};
+static int luags_Room_get_BottomEdge(lua_State *L) {
+	lua_pushinteger(L, AGS_Room_get_BottomEdge());
+	return 1;
+};
+static int luags_Room_get_ColorDepth(lua_State *L) {
+	lua_pushinteger(L, AGS_Room_get_ColorDepth());
+	return 1;
+};
+static int luags_Room_get_Height(lua_State *L) {
+	lua_pushinteger(L, AGS_Room_get_Height());
+	return 1;
+};
+static int luags_Room_get_LeftEdge(lua_State *L) {
+	lua_pushinteger(L, AGS_Room_get_LeftEdge());
+	return 1;
+};
+static int luags_Room_geti_Messages(lua_State *L) {
+	lua_pushstring(L, AGS_Room_geti_Messages((int)luaL_checkint(L,1)));
+	return 1;
+};
+static int luags_Room_get_MusicOnLoad(lua_State *L) {
+	lua_pushinteger(L, AGS_Room_get_MusicOnLoad());
+	return 1;
+};
+static int luags_Room_get_ObjectCount(lua_State *L) {
+	lua_pushinteger(L, AGS_Room_get_ObjectCount());
+	return 1;
+};
+static int luags_Room_get_RightEdge(lua_State *L) {
+	lua_pushinteger(L, AGS_Room_get_RightEdge());
+	return 1;
+};
+static int luags_Room_get_TopEdge(lua_State *L) {
+	lua_pushinteger(L, AGS_Room_get_TopEdge());
+	return 1;
+};
+static int luags_Room_get_Width(lua_State *L) {
+	lua_pushinteger(L, AGS_Room_get_Width());
+	return 1;
+};
+#undef ROOM_UV_DRAWINGSURFACE_META
+#undef ROOM_UV_DRAWINGSURFACE_STORE
+
+int luaopen_ags_Room(lua_State *L) {
+	int IDX_LIB, IDX_LIB_META;
+	int IDX_DRAWINGSURFACE_META;
+	int IDX_DRAWINGSURFACE_STORE;
+	luaL_register(L, "ags.Room", llh_null_lib);
+	IDX_LIB = lua_gettop(L);
+	lua_createtable(L,0,2);
+	IDX_LIB_META = lua_gettop(L);
+	lua_pushvalue(L,IDX_LIB_META);
+	lua_setmetatable(L,IDX_LIB);
+	luaL_newmetatable(L, "AGS_DrawingSurface*");
+	IDX_DRAWINGSURFACE_META = lua_gettop(L);
+	luaL_newmetatable(L, "AGS_DrawingSurface* store");
+	IDX_DRAWINGSURFACE_STORE = lua_gettop(L);
+	lua_getglobal(L, "agsinternal");
+	lua_getfield(L, -1, "initlib");
+	lua_pushvalue(L, IDX_LIB);
+	lua_pushvalue(L, IDX_LIB_META);
+	lua_call(L,2,0);
+	lua_pop(L,1); // agsinternal
+	
+	#define ADD_MEMBER(name,f) { \
+		lua_pushliteral(L, #name); \
+		lua_pushvalue(L, IDX_DRAWINGSURFACE_META); \
+		lua_pushvalue(L, IDX_DRAWINGSURFACE_STORE); \
+		lua_pushcclosure(L, f, 2); \
+		lua_rawset(L, IDX_LIB); \
+	}
+	#define ADD_METHOD(name) { if (AGS_Room_##name) { ADD_MEMBER(name, luags_Room_##name); } }
+	ADD_METHOD(GetTextProperty);
+	ADD_METHOD(GetDrawingSurfaceForBackground);
+	ADD_METHOD(get_BottomEdge);
+	ADD_METHOD(get_ColorDepth);
+	ADD_METHOD(get_Height);
+	ADD_METHOD(get_LeftEdge);
+	ADD_METHOD(geti_Messages);
+	ADD_METHOD(get_MusicOnLoad);
+	ADD_METHOD(get_ObjectCount);
+	ADD_METHOD(get_RightEdge);
+	ADD_METHOD(get_TopEdge);
+	ADD_METHOD(get_Width);
+	#undef ADD_METHOD
+	#undef ADD_MEMBER
+	
+	lua_settop(L,IDX_LIB);
+	return 1;
+};
+
+// Game Lua wrappers
+#define GAME_UV_VIEWFRAME_META lua_upvalueindex(1)
+#define GAME_UV_VIEWFRAME_STORE lua_upvalueindex(2)
+static int luags_Game_ChangeTranslation(lua_State *L) {
+	lua_pushboolean(L, AGS_Game_ChangeTranslation(luaL_checkstring(L,1)));
+	return 1;
+};
+static int luags_Game_DoOnceOnly(lua_State *L) {
+	lua_pushboolean(L, AGS_Game_DoOnceOnly(luaL_checkstring(L,1)));
+	return 1;
+};
+static int luags_Game_GetColorFromRGB(lua_State *L) {
+	lua_pushinteger(L, AGS_Game_GetColorFromRGB((int)luaL_checkint(L,1), (int)luaL_checkint(L,2), (int)luaL_checkint(L,3)));
+	return 1;
+};
+static int luags_Game_GetFrameCountForLoop(lua_State *L) {
+	lua_pushinteger(L, AGS_Game_GetFrameCountForLoop((int)luaL_checkint(L,1), (int)luaL_checkint(L,2)));
+	return 1;
+};
+static int luags_Game_GetLocationName(lua_State *L) {
+	lua_pushstring(L, AGS_Game_GetLocationName((int)luaL_checkint(L,1), (int)luaL_checkint(L,2)));
+	return 1;
+};
+static int luags_Game_GetLoopCountForView(lua_State *L) {
+	lua_pushinteger(L, AGS_Game_GetLoopCountForView((int)luaL_checkint(L,1)));
+	return 1;
+};
+static int luags_Game_GetMODPattern(lua_State *L) {
+	lua_pushinteger(L, AGS_Game_GetMODPattern());
+	return 1;
+};
+static int luags_Game_GetRunNextSettingForLoop(lua_State *L) {
+	lua_pushboolean(L, AGS_Game_GetRunNextSettingForLoop((int)luaL_checkint(L,1), (int)luaL_checkint(L,2)));
+	return 1;
+};
+static int luags_Game_GetSaveSlotDescription(lua_State *L) {
+	lua_pushstring(L, AGS_Game_GetSaveSlotDescription((int)luaL_checkint(L,1)));
+	return 1;
+};
+static int luags_Game_GetViewFrame(lua_State *L) {
+	luags_pushViewFrame(L, AGS_Game_GetViewFrame((int)luaL_checkint(L,1), (int)luaL_checkint(L,2), (int)luaL_checkint(L,3)), GAME_UV_VIEWFRAME_META, GAME_UV_VIEWFRAME_STORE);
+	return 1;
+};
+static int luags_Game_InputBox(lua_State *L) {
+	lua_pushstring(L, AGS_Game_InputBox(luaL_checkstring(L,1)));
+	return 1;
+};
+static int luags_Game_IsAudioPlaying(lua_State *L) {
+	lua_pushboolean(L, AGS_Game_IsAudioPlaying((int)luaL_optint(L,1,AGS_SCR_NO_VALUE)));
+	return 1;
+};
+static int luags_Game_SetSaveGameDirectory(lua_State *L) {
+	lua_pushboolean(L, AGS_Game_SetSaveGameDirectory(luaL_checkstring(L,1)));
+	return 1;
+};
+static int luags_Game_StopAudio(lua_State *L) {
+	AGS_Game_StopAudio((int)luaL_optint(L,1,AGS_SCR_NO_VALUE));
+	return 0;
+};
+static int luags_Game_StopSound(lua_State *L) {
+	AGS_Game_StopSound(lua_toboolean(L,1));
+	return 0;
+};
+static int luags_Game_get_CharacterCount(lua_State *L) {
+	lua_pushinteger(L, AGS_Game_get_CharacterCount());
+	return 1;
+};
+static int luags_Game_get_DialogCount(lua_State *L) {
+	lua_pushinteger(L, AGS_Game_get_DialogCount());
+	return 1;
+};
+static int luags_Game_get_FileName(lua_State *L) {
+	lua_pushstring(L, AGS_Game_get_FileName());
+	return 1;
+};
+static int luags_Game_get_FontCount(lua_State *L) {
+	lua_pushinteger(L, AGS_Game_get_FontCount());
+	return 1;
+};
+static int luags_Game_geti_GlobalMessages(lua_State *L) {
+	lua_pushstring(L, AGS_Game_geti_GlobalMessages((int)luaL_checkint(L,1)));
+	return 1;
+};
+static int luags_Game_geti_GlobalStrings(lua_State *L) {
+	lua_pushstring(L, AGS_Game_geti_GlobalStrings((int)luaL_checkint(L,1)));
+	return 1;
+};
+static int luags_Game_seti_GlobalStrings(lua_State *L) {
+	AGS_Game_seti_GlobalStrings((int)luaL_checkint(L,1), luaL_checkstring(L,2));
+	return 0;
+};
+static int luags_Game_get_GUICount(lua_State *L) {
+	lua_pushinteger(L, AGS_Game_get_GUICount());
+	return 1;
+};
+static int luags_Game_get_IgnoreUserInputAfterTextTimeoutMs(lua_State *L) {
+	lua_pushinteger(L, AGS_Game_get_IgnoreUserInputAfterTextTimeoutMs());
+	return 1;
+};
+static int luags_Game_set_IgnoreUserInputAfterTextTimeoutMs(lua_State *L) {
+	AGS_Game_set_IgnoreUserInputAfterTextTimeoutMs((int)luaL_checkint(L,1));
+	return 0;
+};
+static int luags_Game_get_InSkippableCutscene(lua_State *L) {
+	lua_pushboolean(L, AGS_Game_get_InSkippableCutscene());
+	return 1;
+};
+static int luags_Game_get_InventoryItemCount(lua_State *L) {
+	lua_pushinteger(L, AGS_Game_get_InventoryItemCount());
+	return 1;
+};
+static int luags_Game_get_MinimumTextDisplayTimeMs(lua_State *L) {
+	lua_pushinteger(L, AGS_Game_get_MinimumTextDisplayTimeMs());
+	return 1;
+};
+static int luags_Game_set_MinimumTextDisplayTimeMs(lua_State *L) {
+	AGS_Game_set_MinimumTextDisplayTimeMs((int)luaL_checkint(L,1));
+	return 0;
+};
+static int luags_Game_get_MouseCursorCount(lua_State *L) {
+	lua_pushinteger(L, AGS_Game_get_MouseCursorCount());
+	return 1;
+};
+static int luags_Game_get_Name(lua_State *L) {
+	lua_pushstring(L, AGS_Game_get_Name());
+	return 1;
+};
+static int luags_Game_set_Name(lua_State *L) {
+	AGS_Game_set_Name(luaL_checkstring(L,1));
+	return 0;
+};
+static int luags_Game_get_NormalFont(lua_State *L) {
+	luags_pushFontType(L, AGS_Game_get_NormalFont());
+	return 1;
+};
+static int luags_Game_set_NormalFont(lua_State *L) {
+	AGS_Game_set_NormalFont(luags_checkFontType(L,1));
+	return 0;
+};
+static int luags_Game_get_SkippingCutscene(lua_State *L) {
+	lua_pushboolean(L, AGS_Game_get_SkippingCutscene());
+	return 1;
+};
+static int luags_Game_get_SpeechFont(lua_State *L) {
+	luags_pushFontType(L, AGS_Game_get_SpeechFont());
+	return 1;
+};
+static int luags_Game_set_SpeechFont(lua_State *L) {
+	AGS_Game_set_SpeechFont(luags_checkFontType(L,1));
+	return 0;
+};
+static int luags_Game_geti_SpriteHeight(lua_State *L) {
+	lua_pushinteger(L, AGS_Game_geti_SpriteHeight((int)luaL_checkint(L,1)));
+	return 1;
+};
+static int luags_Game_geti_SpriteWidth(lua_State *L) {
+	lua_pushinteger(L, AGS_Game_geti_SpriteWidth((int)luaL_checkint(L,1)));
+	return 1;
+};
+static int luags_Game_get_TextReadingSpeed(lua_State *L) {
+	lua_pushinteger(L, AGS_Game_get_TextReadingSpeed());
+	return 1;
+};
+static int luags_Game_set_TextReadingSpeed(lua_State *L) {
+	AGS_Game_set_TextReadingSpeed((int)luaL_checkint(L,1));
+	return 0;
+};
+static int luags_Game_get_TranslationFilename(lua_State *L) {
+	lua_pushstring(L, AGS_Game_get_TranslationFilename());
+	return 1;
+};
+static int luags_Game_get_UseNativeCoordinates(lua_State *L) {
+	lua_pushboolean(L, AGS_Game_get_UseNativeCoordinates());
+	return 1;
+};
+static int luags_Game_get_ViewCount(lua_State *L) {
+	lua_pushinteger(L, AGS_Game_get_ViewCount());
+	return 1;
+};
+#undef GAME_UV_VIEWFRAME_META
+#undef GAME_UV_VIEWFRAME_STORE
+
+int luaopen_ags_Game(lua_State *L) {
+	int IDX_LIB, IDX_LIB_META;
+	int IDX_VIEWFRAME_META;
+	int IDX_VIEWFRAME_STORE;
+	luaL_register(L, "ags.Game", llh_null_lib);
+	IDX_LIB = lua_gettop(L);
+	lua_createtable(L,0,2);
+	IDX_LIB_META = lua_gettop(L);
+	lua_pushvalue(L,IDX_LIB_META);
+	lua_setmetatable(L,IDX_LIB);
+	luaL_newmetatable(L, "AGS_ViewFrame*");
+	IDX_VIEWFRAME_META = lua_gettop(L);
+	luaL_newmetatable(L, "AGS_ViewFrame* store");
+	IDX_VIEWFRAME_STORE = lua_gettop(L);
+	lua_getglobal(L, "agsinternal");
+	lua_getfield(L, -1, "initlib");
+	lua_pushvalue(L, IDX_LIB);
+	lua_pushvalue(L, IDX_LIB_META);
+	lua_call(L,2,0);
+	lua_pop(L,1); // agsinternal
+	
+	#define ADD_MEMBER(name,f) { \
+		lua_pushliteral(L, #name); \
+		lua_pushvalue(L, IDX_VIEWFRAME_META); \
+		lua_pushvalue(L, IDX_VIEWFRAME_STORE); \
+		lua_pushcclosure(L, f, 2); \
+		lua_rawset(L, IDX_LIB); \
+	}
+	#define ADD_METHOD(name) { if (AGS_Game_##name) { ADD_MEMBER(name, luags_Game_##name); } }
+	ADD_METHOD(ChangeTranslation);
+	ADD_METHOD(DoOnceOnly);
+	ADD_METHOD(GetColorFromRGB);
+	ADD_METHOD(GetFrameCountForLoop);
+	ADD_METHOD(GetLocationName);
+	ADD_METHOD(GetLoopCountForView);
+	ADD_METHOD(GetMODPattern);
+	ADD_METHOD(GetRunNextSettingForLoop);
+	ADD_METHOD(GetSaveSlotDescription);
+	ADD_METHOD(GetViewFrame);
+	ADD_METHOD(InputBox);
+	ADD_METHOD(IsAudioPlaying);
+	ADD_METHOD(SetSaveGameDirectory);
+	ADD_METHOD(StopAudio);
+	ADD_METHOD(StopSound);
+	ADD_METHOD(get_CharacterCount);
+	ADD_METHOD(get_DialogCount);
+	ADD_METHOD(get_FileName);
+	ADD_METHOD(get_FontCount);
+	ADD_METHOD(geti_GlobalMessages);
+	ADD_METHOD(geti_GlobalStrings);
+	ADD_METHOD(seti_GlobalStrings);
+	ADD_METHOD(get_GUICount);
+	ADD_METHOD(get_IgnoreUserInputAfterTextTimeoutMs);
+	ADD_METHOD(set_IgnoreUserInputAfterTextTimeoutMs);
+	ADD_METHOD(get_InSkippableCutscene);
+	ADD_METHOD(get_InventoryItemCount);
+	ADD_METHOD(get_MinimumTextDisplayTimeMs);
+	ADD_METHOD(set_MinimumTextDisplayTimeMs);
+	ADD_METHOD(get_MouseCursorCount);
+	ADD_METHOD(get_Name);
+	ADD_METHOD(set_Name);
+	ADD_METHOD(get_NormalFont);
+	ADD_METHOD(set_NormalFont);
+	ADD_METHOD(get_SkippingCutscene);
+	ADD_METHOD(get_SpeechFont);
+	ADD_METHOD(set_SpeechFont);
+	ADD_METHOD(geti_SpriteHeight);
+	ADD_METHOD(geti_SpriteWidth);
+	ADD_METHOD(get_TextReadingSpeed);
+	ADD_METHOD(set_TextReadingSpeed);
+	ADD_METHOD(get_TranslationFilename);
+	ADD_METHOD(get_UseNativeCoordinates);
+	ADD_METHOD(get_ViewCount);
+	#undef ADD_METHOD
+	#undef ADD_MEMBER
+	
+	lua_settop(L,IDX_LIB);
+	return 1;
+};
+
+// Parser Lua wrappers
+static int luags_Parser_FindWordID(lua_State *L) {
+	lua_pushinteger(L, AGS_Parser_FindWordID(luaL_checkstring(L,1)));
+	return 1;
+};
+static int luags_Parser_ParseText(lua_State *L) {
+	AGS_Parser_ParseText(luaL_checkstring(L,1));
+	return 0;
+};
+static int luags_Parser_Said(lua_State *L) {
+	lua_pushboolean(L, AGS_Parser_Said(luaL_checkstring(L,1)));
+	return 1;
+};
+static int luags_Parser_SaidUnknownWord(lua_State *L) {
+	lua_pushstring(L, AGS_Parser_SaidUnknownWord());
+	return 1;
+};
+
+int luaopen_ags_Parser(lua_State *L) {
+	int IDX_LIB, IDX_LIB_META;
+	luaL_register(L, "ags.Parser", llh_null_lib);
+	IDX_LIB = lua_gettop(L);
+	lua_createtable(L,0,2);
+	IDX_LIB_META = lua_gettop(L);
+	lua_pushvalue(L,IDX_LIB_META);
+	lua_setmetatable(L,IDX_LIB);
+	lua_getglobal(L, "agsinternal");
+	lua_getfield(L, -1, "initlib");
+	lua_pushvalue(L, IDX_LIB);
+	lua_pushvalue(L, IDX_LIB_META);
+	lua_call(L,2,0);
+	lua_pop(L,1); // agsinternal
+	
+	#define ADD_MEMBER(name,f) { lua_pushliteral(L,#name); lua_pushcfunction(L,f); lua_rawset(L, IDX_LIB); }
+	#define ADD_METHOD(name) { if (AGS_Parser_##name) { ADD_MEMBER(name, luags_Parser_##name); } }
+	ADD_METHOD(FindWordID);
+	ADD_METHOD(ParseText);
+	ADD_METHOD(Said);
+	ADD_METHOD(SaidUnknownWord);
+	#undef ADD_METHOD
+	#undef ADD_MEMBER
+	
+	lua_settop(L,IDX_LIB);
+	return 1;
+};
+
+// Mouse Lua wrappers
+static int luags_Mouse_ChangeModeGraphic(lua_State *L) {
+	AGS_Mouse_ChangeModeGraphic(luags_checkCursorMode(L,1), (int)luaL_checkint(L,2));
+	return 0;
+};
+static int luags_Mouse_ChangeModeHotspot(lua_State *L) {
+	AGS_Mouse_ChangeModeHotspot(luags_checkCursorMode(L,1), (int)luaL_checkint(L,2), (int)luaL_checkint(L,3));
+	return 0;
+};
+static int luags_Mouse_ChangeModeView(lua_State *L) {
+	AGS_Mouse_ChangeModeView(luags_checkCursorMode(L,1), (int)luaL_checkint(L,2));
+	return 0;
+};
+static int luags_Mouse_DisableMode(lua_State *L) {
+	AGS_Mouse_DisableMode(luags_checkCursorMode(L,1));
+	return 0;
+};
+static int luags_Mouse_EnableMode(lua_State *L) {
+	AGS_Mouse_EnableMode(luags_checkCursorMode(L,1));
+	return 0;
+};
+static int luags_Mouse_GetModeGraphic(lua_State *L) {
+	lua_pushinteger(L, AGS_Mouse_GetModeGraphic(luags_checkCursorMode(L,1)));
+	return 1;
+};
+static int luags_Mouse_IsButtonDown(lua_State *L) {
+	lua_pushboolean(L, AGS_Mouse_IsButtonDown(luags_checkMouseButton(L,1)));
+	return 1;
+};
+static int luags_Mouse_SaveCursorUntilItLeaves(lua_State *L) {
+	AGS_Mouse_SaveCursorUntilItLeaves();
+	return 0;
+};
+static int luags_Mouse_SelectNextMode(lua_State *L) {
+	AGS_Mouse_SelectNextMode();
+	return 0;
+};
+static int luags_Mouse_SetBounds(lua_State *L) {
+	AGS_Mouse_SetBounds((int)luaL_checkint(L,1), (int)luaL_checkint(L,2), (int)luaL_checkint(L,3), (int)luaL_checkint(L,4));
+	return 0;
+};
+static int luags_Mouse_SetPosition(lua_State *L) {
+	AGS_Mouse_SetPosition((int)luaL_checkint(L,1), (int)luaL_checkint(L,2));
+	return 0;
+};
+static int luags_Mouse_Update(lua_State *L) {
+	AGS_Mouse_Update();
+	return 0;
+};
+static int luags_Mouse_UseDefaultGraphic(lua_State *L) {
+	AGS_Mouse_UseDefaultGraphic();
+	return 0;
+};
+static int luags_Mouse_UseModeGraphic(lua_State *L) {
+	AGS_Mouse_UseModeGraphic(luags_checkCursorMode(L,1));
+	return 0;
+};
+static int luags_Mouse_get_Mode(lua_State *L) {
+	luags_pushCursorMode(L, AGS_Mouse_get_Mode());
+	return 1;
+};
+static int luags_Mouse_set_Mode(lua_State *L) {
+	AGS_Mouse_set_Mode(luags_checkCursorMode(L,1));
+	return 0;
+};
+static int luags_Mouse_get_Visible(lua_State *L) {
+	lua_pushboolean(L, AGS_Mouse_get_Visible());
+	return 1;
+};
+static int luags_Mouse_set_Visible(lua_State *L) {
+	AGS_Mouse_set_Visible(llh_checkboolean(L,1));
+	return 0;
+};
+
+int luaopen_ags_Mouse(lua_State *L) {
+	int IDX_LIB, IDX_LIB_META;
+	luaL_register(L, "ags.Mouse", llh_null_lib);
+	IDX_LIB = lua_gettop(L);
+	lua_createtable(L,0,2);
+	IDX_LIB_META = lua_gettop(L);
+	lua_pushvalue(L,IDX_LIB_META);
+	lua_setmetatable(L,IDX_LIB);
+	lua_getglobal(L, "agsinternal");
+	lua_getfield(L, -1, "initlib");
+	lua_pushvalue(L, IDX_LIB);
+	lua_pushvalue(L, IDX_LIB_META);
+	lua_call(L,2,0);
+	lua_pop(L,1); // agsinternal
+	
+	#define ADD_MEMBER(name,f) { lua_pushliteral(L,#name); lua_pushcfunction(L,f); lua_rawset(L, IDX_LIB); }
+	#define ADD_METHOD(name) { if (AGS_Mouse_##name) { ADD_MEMBER(name, luags_Mouse_##name); } }
+	ADD_METHOD(ChangeModeGraphic);
+	ADD_METHOD(ChangeModeHotspot);
+	ADD_METHOD(ChangeModeView);
+	ADD_METHOD(DisableMode);
+	ADD_METHOD(EnableMode);
+	ADD_METHOD(GetModeGraphic);
+	ADD_METHOD(IsButtonDown);
+	ADD_METHOD(SaveCursorUntilItLeaves);
+	ADD_METHOD(SelectNextMode);
+	ADD_METHOD(SetBounds);
+	ADD_METHOD(SetPosition);
+	ADD_METHOD(Update);
+	ADD_METHOD(UseDefaultGraphic);
+	ADD_METHOD(UseModeGraphic);
+	ADD_METHOD(get_Mode);
+	ADD_METHOD(set_Mode);
+	ADD_METHOD(get_Visible);
+	ADD_METHOD(set_Visible);
+	#undef ADD_METHOD
+	#undef ADD_MEMBER
+	
+	lua_settop(L,IDX_LIB);
+	return 1;
+};
+
+// File Lua wrappers
+#define FILE_UV_META lua_upvalueindex(1)
+#define FILE_UV_STORE lua_upvalueindex(2)
+static int luags_File_Delete(lua_State *L) {
+	lua_pushboolean(L, AGS_File_Delete(luaL_checkstring(L,1)));
+	return 1;
+};
+static int luags_File_Exists(lua_State *L) {
+	lua_pushboolean(L, AGS_File_Exists(luaL_checkstring(L,1)));
+	return 1;
+};
+static int luags_File_Open(lua_State *L) {
+	luags_pushFile(L, AGS_File_Open(luaL_checkstring(L,1), luags_checkFileMode(L,2)), FILE_UV_META, FILE_UV_STORE);
+	return 1;
+};
+static int luags_File_Close(lua_State *L) {
+	AGS_File* self = luags_checkFile(L, 1, FILE_UV_META);
+	AGS_File_Close(self);
+	return 0;
+};
+static int luags_File_ReadInt(lua_State *L) {
+	AGS_File* self = luags_checkFile(L, 1, FILE_UV_META);
+	lua_pushinteger(L, AGS_File_ReadInt(self));
+	return 1;
+};
+static int luags_File_ReadRawChar(lua_State *L) {
+	AGS_File* self = luags_checkFile(L, 1, FILE_UV_META);
+	lua_pushinteger(L, AGS_File_ReadRawChar(self));
+	return 1;
+};
+static int luags_File_ReadRawInt(lua_State *L) {
+	AGS_File* self = luags_checkFile(L, 1, FILE_UV_META);
+	lua_pushinteger(L, AGS_File_ReadRawInt(self));
+	return 1;
+};
+static int luags_File_ReadRawLineBack(lua_State *L) {
+	AGS_File* self = luags_checkFile(L, 1, FILE_UV_META);
+	lua_pushstring(L, AGS_File_ReadRawLineBack(self));
+	return 1;
+};
+static int luags_File_ReadStringBack(lua_State *L) {
+	AGS_File* self = luags_checkFile(L, 1, FILE_UV_META);
+	lua_pushstring(L, AGS_File_ReadStringBack(self));
+	return 1;
+};
+static int luags_File_WriteInt(lua_State *L) {
+	AGS_File* self = luags_checkFile(L, 1, FILE_UV_META);
+	AGS_File_WriteInt(self, (int)luaL_checkint(L,2));
+	return 0;
+};
+static int luags_File_WriteRawChar(lua_State *L) {
+	AGS_File* self = luags_checkFile(L, 1, FILE_UV_META);
+	AGS_File_WriteRawChar(self, (int)luaL_checkint(L,2));
+	return 0;
+};
+static int luags_File_WriteRawLine(lua_State *L) {
+	AGS_File* self = luags_checkFile(L, 1, FILE_UV_META);
+	AGS_File_WriteRawLine(self, luaL_checkstring(L,2));
+	return 0;
+};
+static int luags_File_WriteString(lua_State *L) {
+	AGS_File* self = luags_checkFile(L, 1, FILE_UV_META);
+	AGS_File_WriteString(self, luaL_checkstring(L,2));
+	return 0;
+};
+static int luags_File_get_EOF(lua_State *L) {
+	AGS_File* self = luags_checkFile(L, 1, FILE_UV_META);
+	lua_pushboolean(L, AGS_File_get_EOF(self));
+	return 1;
+};
+static int luags_File_get_Error(lua_State *L) {
+	AGS_File* self = luags_checkFile(L, 1, FILE_UV_META);
+	lua_pushboolean(L, AGS_File_get_Error(self));
+	return 1;
+};
+#undef FILE_UV_META
+#undef FILE_UV_STORE
+
+int luaopen_ags_File(lua_State *L) {
+	int IDX_LIB, IDX_LIB_META;
+	int IDX_FILE_META;
+	int IDX_FILE_STORE;
+	luaL_register(L, "ags.File", llh_null_lib);
+	IDX_LIB = lua_gettop(L);
+	lua_createtable(L,0,2);
+	IDX_LIB_META = lua_gettop(L);
+	lua_pushvalue(L,IDX_LIB_META);
+	lua_setmetatable(L,IDX_LIB);
+	luaL_newmetatable(L, "AGS_File*");
+	IDX_FILE_META = lua_gettop(L);
+	luaL_newmetatable(L, "AGS_File* store");
+	IDX_FILE_STORE = lua_gettop(L);
+	lua_getglobal(L, "agsinternal");
+	lua_getfield(L, -1, "initlib");
+	lua_pushvalue(L, IDX_LIB);
+	lua_pushvalue(L, IDX_LIB_META);
+	lua_pushvalue(L, IDX_FILE_META);
+	lua_pushboolean(L, 1);
+	lua_call(L,4,0);
+	lua_pop(L,1); // agsinternal
+	luaL_newmetatable(L, "Weak");
+	lua_pushliteral(L, "__mode");
+	lua_pushliteral(L, "v");
+	lua_rawset(L,-3);
+	lua_setmetatable(L, IDX_FILE_STORE);
+	lua_pushcfunction(L, AGS_Ephemeral__gc);
+	lua_setfield(L, IDX_FILE_META, "__gc");
+	lua_pushvalue(L, IDX_FILE_STORE);
+	lua_setfield(L, IDX_FILE_META, "__store");
+	lua_getfield(L, LUA_REGISTRYINDEX, "agsinternal");
+	lua_getfield(L, -1, "persistephemeral");
+	lua_setfield(L, IDX_FILE_META, "__persist");
+	lua_pop(L,1);
+	
+	#define ADD_MEMBER(name,f) { \
+		lua_pushliteral(L, #name); \
+		lua_pushvalue(L, IDX_FILE_META); \
+		lua_pushvalue(L, IDX_FILE_STORE); \
+		lua_pushcclosure(L, f, 2); \
+		lua_rawset(L, IDX_LIB); \
+	}
+	#define ADD_METHOD(name) { if (AGS_File_##name) { ADD_MEMBER(name, luags_File_##name); } }
+	ADD_METHOD(Delete);
+	ADD_METHOD(Exists);
+	ADD_METHOD(Open);
+	ADD_METHOD(Close);
+	ADD_METHOD(ReadInt);
+	ADD_METHOD(ReadRawChar);
+	ADD_METHOD(ReadRawInt);
+	ADD_METHOD(ReadRawLineBack);
+	ADD_METHOD(ReadStringBack);
+	ADD_METHOD(WriteInt);
+	ADD_METHOD(WriteRawChar);
+	ADD_METHOD(WriteRawLine);
+	ADD_METHOD(WriteString);
+	ADD_METHOD(get_EOF);
+	ADD_METHOD(get_Error);
+	#undef ADD_METHOD
+	#undef ADD_MEMBER
+	
+	lua_settop(L,IDX_LIB);
+	return 1;
+};
+
+// InventoryItem Lua wrappers
+#define INVENTORYITEM_UV_META lua_upvalueindex(1)
+#define INVENTORYITEM_UV_STORE lua_upvalueindex(2)
+static int luags_InventoryItem_GetAtScreenXY(lua_State *L) {
+	luags_pushInventoryItem(L, AGS_InventoryItem_GetAtScreenXY((int)luaL_checkint(L,1), (int)luaL_checkint(L,2)), INVENTORYITEM_UV_META, INVENTORYITEM_UV_STORE);
+	return 1;
+};
+static int luags_InventoryItem_GetProperty(lua_State *L) {
+	AGS_InventoryItem* self = luags_checkInventoryItem(L, 1, INVENTORYITEM_UV_META);
+	lua_pushinteger(L, AGS_InventoryItem_GetProperty(self, luaL_checkstring(L,2)));
+	return 1;
+};
+static int luags_InventoryItem_GetTextProperty(lua_State *L) {
+	AGS_InventoryItem* self = luags_checkInventoryItem(L, 1, INVENTORYITEM_UV_META);
+	lua_pushstring(L, AGS_InventoryItem_GetTextProperty(self, luaL_checkstring(L,2)));
+	return 1;
+};
+static int luags_InventoryItem_IsInteractionAvailable(lua_State *L) {
+	AGS_InventoryItem* self = luags_checkInventoryItem(L, 1, INVENTORYITEM_UV_META);
+	lua_pushinteger(L, AGS_InventoryItem_IsInteractionAvailable(self, luags_checkCursorMode(L,2)));
+	return 1;
+};
+static int luags_InventoryItem_RunInteraction(lua_State *L) {
+	AGS_InventoryItem* self = luags_checkInventoryItem(L, 1, INVENTORYITEM_UV_META);
+	AGS_InventoryItem_RunInteraction(self, luags_checkCursorMode(L,2));
+	return 0;
+};
+static int luags_InventoryItem_get_CursorGraphic(lua_State *L) {
+	AGS_InventoryItem* self = luags_checkInventoryItem(L, 1, INVENTORYITEM_UV_META);
+	lua_pushinteger(L, AGS_InventoryItem_get_CursorGraphic(self));
+	return 1;
+};
+static int luags_InventoryItem_set_CursorGraphic(lua_State *L) {
+	AGS_InventoryItem* self = luags_checkInventoryItem(L, 1, INVENTORYITEM_UV_META);
+	AGS_InventoryItem_set_CursorGraphic(self, (int)luaL_checkint(L,2));
+	return 0;
+};
+static int luags_InventoryItem_get_Graphic(lua_State *L) {
+	AGS_InventoryItem* self = luags_checkInventoryItem(L, 1, INVENTORYITEM_UV_META);
+	lua_pushinteger(L, AGS_InventoryItem_get_Graphic(self));
+	return 1;
+};
+static int luags_InventoryItem_set_Graphic(lua_State *L) {
+	AGS_InventoryItem* self = luags_checkInventoryItem(L, 1, INVENTORYITEM_UV_META);
+	AGS_InventoryItem_set_Graphic(self, (int)luaL_checkint(L,2));
+	return 0;
+};
+static int luags_InventoryItem_get_ID(lua_State *L) {
+	AGS_InventoryItem* self = luags_checkInventoryItem(L, 1, INVENTORYITEM_UV_META);
+	lua_pushinteger(L, AGS_InventoryItem_get_ID(self));
+	return 1;
+};
+static int luags_InventoryItem_get_Name(lua_State *L) {
+	AGS_InventoryItem* self = luags_checkInventoryItem(L, 1, INVENTORYITEM_UV_META);
+	lua_pushstring(L, AGS_InventoryItem_get_Name(self));
+	return 1;
+};
+static int luags_InventoryItem_set_Name(lua_State *L) {
+	AGS_InventoryItem* self = luags_checkInventoryItem(L, 1, INVENTORYITEM_UV_META);
+	AGS_InventoryItem_set_Name(self, luaL_checkstring(L,2));
+	return 0;
+};
+#undef INVENTORYITEM_UV_META
+#undef INVENTORYITEM_UV_STORE
+
+int luaopen_ags_InventoryItem(lua_State *L) {
+	int IDX_LIB, IDX_LIB_META;
+	int IDX_INVENTORYITEM_META;
+	int IDX_INVENTORYITEM_STORE;
+	luaL_register(L, "ags.InventoryItem", llh_null_lib);
+	IDX_LIB = lua_gettop(L);
+	lua_createtable(L,0,2);
+	IDX_LIB_META = lua_gettop(L);
+	lua_pushvalue(L,IDX_LIB_META);
+	lua_setmetatable(L,IDX_LIB);
+	luaL_newmetatable(L, "AGS_InventoryItem*");
+	IDX_INVENTORYITEM_META = lua_gettop(L);
+	luaL_newmetatable(L, IMMORTAL_OBJECT_STORE);
+	IDX_INVENTORYITEM_STORE = lua_gettop(L);
+	lua_getglobal(L, "agsinternal");
+	lua_getfield(L, -1, "initlib");
+	lua_pushvalue(L, IDX_LIB);
+	lua_pushvalue(L, IDX_LIB_META);
+	lua_pushvalue(L, IDX_INVENTORYITEM_META);
+	lua_pushboolean(L, 1);
+	lua_call(L,4,0);
+	lua_pop(L,1); // agsinternal
+	
+	#define ADD_MEMBER(name,f) { \
+		lua_pushliteral(L, #name); \
+		lua_pushvalue(L, IDX_INVENTORYITEM_META); \
+		lua_pushvalue(L, IDX_INVENTORYITEM_STORE); \
+		lua_pushcclosure(L, f, 2); \
+		lua_rawset(L, IDX_LIB); \
+	}
+	#define ADD_METHOD(name) { if (AGS_InventoryItem_##name) { ADD_MEMBER(name, luags_InventoryItem_##name); } }
+	ADD_METHOD(GetAtScreenXY);
+	ADD_METHOD(GetProperty);
+	ADD_METHOD(GetTextProperty);
+	ADD_METHOD(IsInteractionAvailable);
+	ADD_METHOD(RunInteraction);
+	ADD_METHOD(get_CursorGraphic);
+	ADD_METHOD(set_CursorGraphic);
+	ADD_METHOD(get_Graphic);
+	ADD_METHOD(set_Graphic);
+	ADD_METHOD(get_ID);
+	ADD_METHOD(get_Name);
+	ADD_METHOD(set_Name);
+	#undef ADD_METHOD
+	#undef ADD_MEMBER
+	
+	lua_settop(L,IDX_LIB);
+	return 1;
+};
+
+// Overlay Lua wrappers
+#define OVERLAY_UV_META lua_upvalueindex(1)
+#define OVERLAY_UV_STORE lua_upvalueindex(2)
+static int luags_Overlay_CreateGraphical(lua_State *L) {
+	luags_pushOverlay(L, AGS_Overlay_CreateGraphical((int)luaL_checkint(L,1), (int)luaL_checkint(L,2), (int)luaL_checkint(L,3), llh_checkboolean(L,4)), OVERLAY_UV_META, OVERLAY_UV_STORE);
+	return 1;
+};
+static int luags_Overlay_CreateTextual(lua_State *L) {
+	aux_formatstring(L, 6);
+	luags_pushOverlay(L, AGS_Overlay_CreateTextual((int)luaL_checkint(L,1), (int)luaL_checkint(L,2), (int)luaL_checkint(L,3), luags_checkFontType(L,4), (int)luaL_checkint(L,5), lua_tostring(L,6)), OVERLAY_UV_META, OVERLAY_UV_STORE);
+	return 1;
+};
+static int luags_Overlay_SetText(lua_State *L) {
+	AGS_Overlay* self = luags_checkOverlay(L, 1, OVERLAY_UV_META);
+	aux_formatstring(L, 5);
+	AGS_Overlay_SetText(self, (int)luaL_checkint(L,2), luags_checkFontType(L,3), (int)luaL_checkint(L,4), lua_tostring(L,5));
+	return 0;
+};
+static int luags_Overlay_Remove(lua_State *L) {
+	AGS_Overlay* self = luags_checkOverlay(L, 1, OVERLAY_UV_META);
+	AGS_Overlay_Remove(self);
+	return 0;
+};
+static int luags_Overlay_get_Valid(lua_State *L) {
+	AGS_Overlay* self = luags_checkOverlay(L, 1, OVERLAY_UV_META);
+	lua_pushboolean(L, AGS_Overlay_get_Valid(self));
+	return 1;
+};
+static int luags_Overlay_get_X(lua_State *L) {
+	AGS_Overlay* self = luags_checkOverlay(L, 1, OVERLAY_UV_META);
+	lua_pushinteger(L, AGS_Overlay_get_X(self));
+	return 1;
+};
+static int luags_Overlay_set_X(lua_State *L) {
+	AGS_Overlay* self = luags_checkOverlay(L, 1, OVERLAY_UV_META);
+	AGS_Overlay_set_X(self, (int)luaL_checkint(L,2));
+	return 0;
+};
+static int luags_Overlay_get_Y(lua_State *L) {
+	AGS_Overlay* self = luags_checkOverlay(L, 1, OVERLAY_UV_META);
+	lua_pushinteger(L, AGS_Overlay_get_Y(self));
+	return 1;
+};
+static int luags_Overlay_set_Y(lua_State *L) {
+	AGS_Overlay* self = luags_checkOverlay(L, 1, OVERLAY_UV_META);
+	AGS_Overlay_set_Y(self, (int)luaL_checkint(L,2));
+	return 0;
+};
+#undef OVERLAY_UV_META
+#undef OVERLAY_UV_STORE
+
+int luaopen_ags_Overlay(lua_State *L) {
+	int IDX_LIB, IDX_LIB_META;
+	int IDX_OVERLAY_META;
+	int IDX_OVERLAY_STORE;
+	luaL_register(L, "ags.Overlay", llh_null_lib);
+	IDX_LIB = lua_gettop(L);
+	lua_createtable(L,0,2);
+	IDX_LIB_META = lua_gettop(L);
+	lua_pushvalue(L,IDX_LIB_META);
+	lua_setmetatable(L,IDX_LIB);
+	luaL_newmetatable(L, "AGS_Overlay*");
+	IDX_OVERLAY_META = lua_gettop(L);
+	luaL_newmetatable(L, "AGS_Overlay* store");
+	IDX_OVERLAY_STORE = lua_gettop(L);
+	lua_getglobal(L, "agsinternal");
+	lua_getfield(L, -1, "initlib");
+	lua_pushvalue(L, IDX_LIB);
+	lua_pushvalue(L, IDX_LIB_META);
+	lua_pushvalue(L, IDX_OVERLAY_META);
+	lua_pushboolean(L, 1);
+	lua_call(L,4,0);
+	lua_pop(L,1); // agsinternal
+	luaL_newmetatable(L, "Weak");
+	lua_pushliteral(L, "__mode");
+	lua_pushliteral(L, "v");
+	lua_rawset(L,-3);
+	lua_setmetatable(L, IDX_OVERLAY_STORE);
+	lua_pushcfunction(L, AGS_Ephemeral__gc);
+	lua_setfield(L, IDX_OVERLAY_META, "__gc");
+	lua_pushvalue(L, IDX_OVERLAY_STORE);
+	lua_setfield(L, IDX_OVERLAY_META, "__store");
+	lua_getfield(L, LUA_REGISTRYINDEX, "agsinternal");
+	lua_getfield(L, -1, "persistephemeral");
+	lua_setfield(L, IDX_OVERLAY_META, "__persist");
+	lua_pop(L,1);
+	
+	#define ADD_MEMBER(name,f) { \
+		lua_pushliteral(L, #name); \
+		lua_pushvalue(L, IDX_OVERLAY_META); \
+		lua_pushvalue(L, IDX_OVERLAY_STORE); \
+		lua_pushcclosure(L, f, 2); \
+		lua_rawset(L, IDX_LIB); \
+	}
+	#define ADD_METHOD(name) { if (AGS_Overlay_##name) { ADD_MEMBER(name, luags_Overlay_##name); } }
+	ADD_METHOD(CreateGraphical);
+	ADD_METHOD(CreateTextual);
+	ADD_METHOD(SetText);
+	ADD_METHOD(Remove);
+	ADD_METHOD(get_Valid);
+	ADD_METHOD(get_X);
+	ADD_METHOD(set_X);
+	ADD_METHOD(get_Y);
+	ADD_METHOD(set_Y);
+	#undef ADD_METHOD
+	#undef ADD_MEMBER
+	
+	lua_settop(L,IDX_LIB);
+	return 1;
+};
+
+// DynamicSprite Lua wrappers
+#define DYNAMICSPRITE_UV_DRAWINGSURFACE_META lua_upvalueindex(1)
+#define DYNAMICSPRITE_UV_DRAWINGSURFACE_STORE lua_upvalueindex(2)
+#define DYNAMICSPRITE_UV_META lua_upvalueindex(3)
+#define DYNAMICSPRITE_UV_STORE lua_upvalueindex(4)
+static int luags_DynamicSprite_Create(lua_State *L) {
+	luags_pushDynamicSprite(L, AGS_DynamicSprite_Create((int)luaL_checkint(L,1), (int)luaL_checkint(L,2), lua_toboolean(L,3)), DYNAMICSPRITE_UV_META, DYNAMICSPRITE_UV_STORE);
+	return 1;
+};
+static int luags_DynamicSprite_CreateFromBackground(lua_State *L) {
+	luags_pushDynamicSprite(L, AGS_DynamicSprite_CreateFromBackground((int)luaL_optint(L,1,AGS_SCR_NO_VALUE), (int)luaL_optint(L,2,AGS_SCR_NO_VALUE), (int)luaL_optint(L,3,AGS_SCR_NO_VALUE), (int)luaL_optint(L,4,AGS_SCR_NO_VALUE), (int)luaL_optint(L,5,AGS_SCR_NO_VALUE)), DYNAMICSPRITE_UV_META, DYNAMICSPRITE_UV_STORE);
+	return 1;
+};
+static int luags_DynamicSprite_CreateFromDrawingSurface(lua_State *L) {
+	luags_pushDynamicSprite(L, AGS_DynamicSprite_CreateFromDrawingSurface(luags_checkDrawingSurface(L,1, DYNAMICSPRITE_UV_DRAWINGSURFACE_META), (int)luaL_checkint(L,2), (int)luaL_checkint(L,3), (int)luaL_checkint(L,4), (int)luaL_checkint(L,5)), DYNAMICSPRITE_UV_META, DYNAMICSPRITE_UV_STORE);
+	return 1;
+};
+static int luags_DynamicSprite_CreateFromExistingSprite(lua_State *L) {
+	luags_pushDynamicSprite(L, AGS_DynamicSprite_CreateFromExistingSprite((int)luaL_checkint(L,1), lua_toboolean(L,2)), DYNAMICSPRITE_UV_META, DYNAMICSPRITE_UV_STORE);
+	return 1;
+};
+static int luags_DynamicSprite_CreateFromFile(lua_State *L) {
+	luags_pushDynamicSprite(L, AGS_DynamicSprite_CreateFromFile(luaL_checkstring(L,1)), DYNAMICSPRITE_UV_META, DYNAMICSPRITE_UV_STORE);
+	return 1;
+};
+static int luags_DynamicSprite_CreateFromSaveGame(lua_State *L) {
+	luags_pushDynamicSprite(L, AGS_DynamicSprite_CreateFromSaveGame((int)luaL_checkint(L,1), (int)luaL_checkint(L,2), (int)luaL_checkint(L,3)), DYNAMICSPRITE_UV_META, DYNAMICSPRITE_UV_STORE);
+	return 1;
+};
+static int luags_DynamicSprite_CreateFromScreenShot(lua_State *L) {
+	luags_pushDynamicSprite(L, AGS_DynamicSprite_CreateFromScreenShot((int)luaL_optint(L,1,0), (int)luaL_optint(L,2,0)), DYNAMICSPRITE_UV_META, DYNAMICSPRITE_UV_STORE);
+	return 1;
+};
+static int luags_DynamicSprite_ChangeCanvasSize(lua_State *L) {
+	AGS_DynamicSprite* self = luags_checkDynamicSprite(L, 1, DYNAMICSPRITE_UV_META);
+	AGS_DynamicSprite_ChangeCanvasSize(self, (int)luaL_checkint(L,2), (int)luaL_checkint(L,3), (int)luaL_checkint(L,4), (int)luaL_checkint(L,5));
+	return 0;
+};
+static int luags_DynamicSprite_CopyTransparencyMask(lua_State *L) {
+	AGS_DynamicSprite* self = luags_checkDynamicSprite(L, 1, DYNAMICSPRITE_UV_META);
+	AGS_DynamicSprite_CopyTransparencyMask(self, (int)luaL_checkint(L,2));
+	return 0;
+};
+static int luags_DynamicSprite_Crop(lua_State *L) {
+	AGS_DynamicSprite* self = luags_checkDynamicSprite(L, 1, DYNAMICSPRITE_UV_META);
+	AGS_DynamicSprite_Crop(self, (int)luaL_checkint(L,2), (int)luaL_checkint(L,3), (int)luaL_checkint(L,4), (int)luaL_checkint(L,5));
+	return 0;
+};
+static int luags_DynamicSprite_Delete(lua_State *L) {
+	if (ags_closing) return 0;
+	AGS_DynamicSprite* self = luags_checkDynamicSprite(L, 1, DYNAMICSPRITE_UV_META);
+	AGS_DynamicSprite_Delete(self);
+	return 0;
+};
+static int luags_DynamicSprite_Flip(lua_State *L) {
+	AGS_DynamicSprite* self = luags_checkDynamicSprite(L, 1, DYNAMICSPRITE_UV_META);
+	AGS_DynamicSprite_Flip(self, luags_checkeFlipDirection(L,2));
+	return 0;
+};
+static int luags_DynamicSprite_GetDrawingSurface(lua_State *L) {
+	AGS_DynamicSprite* self = luags_checkDynamicSprite(L, 1, DYNAMICSPRITE_UV_META);
+	luags_pushDrawingSurface(L, AGS_DynamicSprite_GetDrawingSurface(self), DYNAMICSPRITE_UV_DRAWINGSURFACE_META, DYNAMICSPRITE_UV_DRAWINGSURFACE_STORE);
+	return 1;
+};
+static int luags_DynamicSprite_Resize(lua_State *L) {
+	AGS_DynamicSprite* self = luags_checkDynamicSprite(L, 1, DYNAMICSPRITE_UV_META);
+	AGS_DynamicSprite_Resize(self, (int)luaL_checkint(L,2), (int)luaL_checkint(L,3));
+	return 0;
+};
+static int luags_DynamicSprite_Rotate(lua_State *L) {
+	AGS_DynamicSprite* self = luags_checkDynamicSprite(L, 1, DYNAMICSPRITE_UV_META);
+	AGS_DynamicSprite_Rotate(self, (int)luaL_checkint(L,2), (int)luaL_optint(L,3,AGS_SCR_NO_VALUE), (int)luaL_optint(L,4,AGS_SCR_NO_VALUE));
+	return 0;
+};
+static int luags_DynamicSprite_SaveToFile(lua_State *L) {
+	AGS_DynamicSprite* self = luags_checkDynamicSprite(L, 1, DYNAMICSPRITE_UV_META);
+	lua_pushinteger(L, AGS_DynamicSprite_SaveToFile(self, luaL_checkstring(L,2)));
+	return 1;
+};
+static int luags_DynamicSprite_Tint(lua_State *L) {
+	AGS_DynamicSprite* self = luags_checkDynamicSprite(L, 1, DYNAMICSPRITE_UV_META);
+	AGS_DynamicSprite_Tint(self, (int)luaL_checkint(L,2), (int)luaL_checkint(L,3), (int)luaL_checkint(L,4), (int)luaL_checkint(L,5), (int)luaL_checkint(L,6));
+	return 0;
+};
+static int luags_DynamicSprite_get_ColorDepth(lua_State *L) {
+	AGS_DynamicSprite* self = luags_checkDynamicSprite(L, 1, DYNAMICSPRITE_UV_META);
+	lua_pushinteger(L, AGS_DynamicSprite_get_ColorDepth(self));
+	return 1;
+};
+static int luags_DynamicSprite_get_Graphic(lua_State *L) {
+	AGS_DynamicSprite* self = luags_checkDynamicSprite(L, 1, DYNAMICSPRITE_UV_META);
+	lua_pushinteger(L, AGS_DynamicSprite_get_Graphic(self));
+	return 1;
+};
+static int luags_DynamicSprite_get_Height(lua_State *L) {
+	AGS_DynamicSprite* self = luags_checkDynamicSprite(L, 1, DYNAMICSPRITE_UV_META);
+	lua_pushinteger(L, AGS_DynamicSprite_get_Height(self));
+	return 1;
+};
+static int luags_DynamicSprite_get_Width(lua_State *L) {
+	AGS_DynamicSprite* self = luags_checkDynamicSprite(L, 1, DYNAMICSPRITE_UV_META);
+	lua_pushinteger(L, AGS_DynamicSprite_get_Width(self));
+	return 1;
+};
+#undef DYNAMICSPRITE_UV_DRAWINGSURFACE_META
+#undef DYNAMICSPRITE_UV_DRAWINGSURFACE_STORE
+#undef DYNAMICSPRITE_UV_META
+#undef DYNAMICSPRITE_UV_STORE
+
+int luaopen_ags_DynamicSprite(lua_State *L) {
+	int IDX_LIB, IDX_LIB_META;
+	int IDX_DRAWINGSURFACE_META;
+	int IDX_DRAWINGSURFACE_STORE;
+	int IDX_DYNAMICSPRITE_META;
+	int IDX_DYNAMICSPRITE_STORE;
+	luaL_register(L, "ags.DynamicSprite", llh_null_lib);
+	IDX_LIB = lua_gettop(L);
+	lua_createtable(L,0,2);
+	IDX_LIB_META = lua_gettop(L);
+	lua_pushvalue(L,IDX_LIB_META);
+	lua_setmetatable(L,IDX_LIB);
+	luaL_newmetatable(L, "AGS_DrawingSurface*");
+	IDX_DRAWINGSURFACE_META = lua_gettop(L);
+	luaL_newmetatable(L, "AGS_DrawingSurface* store");
+	IDX_DRAWINGSURFACE_STORE = lua_gettop(L);
+	luaL_newmetatable(L, "AGS_DynamicSprite*");
+	IDX_DYNAMICSPRITE_META = lua_gettop(L);
+	luaL_newmetatable(L, "AGS_DynamicSprite* store");
+	IDX_DYNAMICSPRITE_STORE = lua_gettop(L);
+	lua_getglobal(L, "agsinternal");
+	lua_getfield(L, -1, "initlib");
+	lua_pushvalue(L, IDX_LIB);
+	lua_pushvalue(L, IDX_LIB_META);
+	lua_pushvalue(L, IDX_DYNAMICSPRITE_META);
+	lua_pushboolean(L, 1);
+	lua_call(L,4,0);
+	lua_pop(L,1); // agsinternal
+	luaL_newmetatable(L, "Weak");
+	lua_pushliteral(L, "__mode");
+	lua_pushliteral(L, "v");
+	lua_rawset(L,-3);
+	lua_setmetatable(L, IDX_DYNAMICSPRITE_STORE);
+	lua_pushcfunction(L, AGS_Ephemeral__gc);
+	lua_setfield(L, IDX_DYNAMICSPRITE_META, "__gc");
+	lua_pushvalue(L, IDX_DYNAMICSPRITE_STORE);
+	lua_setfield(L, IDX_DYNAMICSPRITE_META, "__store");
+	lua_getfield(L, LUA_REGISTRYINDEX, "agsinternal");
+	lua_getfield(L, -1, "persistephemeral");
+	lua_setfield(L, IDX_DYNAMICSPRITE_META, "__persist");
+	lua_pop(L,1);
+	
+	#define ADD_MEMBER(name,f) { \
+		lua_pushliteral(L, #name); \
+		lua_pushvalue(L, IDX_DRAWINGSURFACE_META); \
+		lua_pushvalue(L, IDX_DRAWINGSURFACE_STORE); \
+		lua_pushvalue(L, IDX_DYNAMICSPRITE_META); \
+		lua_pushvalue(L, IDX_DYNAMICSPRITE_STORE); \
+		lua_pushcclosure(L, f, 4); \
+		lua_rawset(L, IDX_LIB); \
+	}
+	#define ADD_METHOD(name) { if (AGS_DynamicSprite_##name) { ADD_MEMBER(name, luags_DynamicSprite_##name); } }
+	ADD_METHOD(Create);
+	ADD_METHOD(CreateFromBackground);
+	ADD_METHOD(CreateFromDrawingSurface);
+	ADD_METHOD(CreateFromExistingSprite);
+	ADD_METHOD(CreateFromFile);
+	ADD_METHOD(CreateFromSaveGame);
+	ADD_METHOD(CreateFromScreenShot);
+	ADD_METHOD(ChangeCanvasSize);
+	ADD_METHOD(CopyTransparencyMask);
+	ADD_METHOD(Crop);
+	ADD_METHOD(Delete);
+	ADD_METHOD(Flip);
+	ADD_METHOD(GetDrawingSurface);
+	ADD_METHOD(Resize);
+	ADD_METHOD(Rotate);
+	ADD_METHOD(SaveToFile);
+	ADD_METHOD(Tint);
+	ADD_METHOD(get_ColorDepth);
+	ADD_METHOD(get_Graphic);
+	ADD_METHOD(get_Height);
+	ADD_METHOD(get_Width);
+	#undef ADD_METHOD
+	#undef ADD_MEMBER
+	
+	lua_settop(L,IDX_LIB);
+	return 1;
+};
+
+// GUIControl Lua wrappers
+#define GUICONTROL_UV_LISTBOX_META lua_upvalueindex(1)
+#define GUICONTROL_UV_LISTBOX_STORE lua_upvalueindex(2)
+#define GUICONTROL_UV_GUI_META lua_upvalueindex(3)
+#define GUICONTROL_UV_GUI_STORE lua_upvalueindex(4)
+#define GUICONTROL_UV_TEXTBOX_META lua_upvalueindex(5)
+#define GUICONTROL_UV_TEXTBOX_STORE lua_upvalueindex(6)
+#define GUICONTROL_UV_LABEL_META lua_upvalueindex(7)
+#define GUICONTROL_UV_LABEL_STORE lua_upvalueindex(8)
+#define GUICONTROL_UV_BUTTON_META lua_upvalueindex(9)
+#define GUICONTROL_UV_BUTTON_STORE lua_upvalueindex(10)
+#define GUICONTROL_UV_META lua_upvalueindex(11)
+#define GUICONTROL_UV_STORE lua_upvalueindex(12)
+#define GUICONTROL_UV_INVWINDOW_META lua_upvalueindex(13)
+#define GUICONTROL_UV_INVWINDOW_STORE lua_upvalueindex(14)
+#define GUICONTROL_UV_SLIDER_META lua_upvalueindex(15)
+#define GUICONTROL_UV_SLIDER_STORE lua_upvalueindex(16)
+static int luags_GUIControl_BringToFront(lua_State *L) {
+	AGS_GUIControl* self = luags_checkGUIControl(L, 1, GUICONTROL_UV_META);
+	AGS_GUIControl_BringToFront(self);
+	return 0;
+};
+static int luags_GUIControl_GetAtScreenXY(lua_State *L) {
+	luags_pushGUIControl(L, AGS_GUIControl_GetAtScreenXY((int)luaL_checkint(L,1), (int)luaL_checkint(L,2)), GUICONTROL_UV_META, GUICONTROL_UV_STORE);
+	return 1;
+};
+static int luags_GUIControl_SendToBack(lua_State *L) {
+	AGS_GUIControl* self = luags_checkGUIControl(L, 1, GUICONTROL_UV_META);
+	AGS_GUIControl_SendToBack(self);
+	return 0;
+};
+static int luags_GUIControl_SetPosition(lua_State *L) {
+	AGS_GUIControl* self = luags_checkGUIControl(L, 1, GUICONTROL_UV_META);
+	AGS_GUIControl_SetPosition(self, (int)luaL_checkint(L,2), (int)luaL_checkint(L,3));
+	return 0;
+};
+static int luags_GUIControl_SetSize(lua_State *L) {
+	AGS_GUIControl* self = luags_checkGUIControl(L, 1, GUICONTROL_UV_META);
+	AGS_GUIControl_SetSize(self, (int)luaL_checkint(L,2), (int)luaL_checkint(L,3));
+	return 0;
+};
+static int luags_GUIControl_get_AsButton(lua_State *L) {
+	AGS_GUIControl* self = luags_checkGUIControl(L, 1, GUICONTROL_UV_META);
+	luags_pushButton(L, AGS_GUIControl_get_AsButton(self), GUICONTROL_UV_BUTTON_META, GUICONTROL_UV_BUTTON_STORE);
+	return 1;
+};
+static int luags_GUIControl_get_AsInvWindow(lua_State *L) {
+	AGS_GUIControl* self = luags_checkGUIControl(L, 1, GUICONTROL_UV_META);
+	luags_pushInvWindow(L, AGS_GUIControl_get_AsInvWindow(self), GUICONTROL_UV_INVWINDOW_META, GUICONTROL_UV_INVWINDOW_STORE);
+	return 1;
+};
+static int luags_GUIControl_get_AsLabel(lua_State *L) {
+	AGS_GUIControl* self = luags_checkGUIControl(L, 1, GUICONTROL_UV_META);
+	luags_pushLabel(L, AGS_GUIControl_get_AsLabel(self), GUICONTROL_UV_LABEL_META, GUICONTROL_UV_LABEL_STORE);
+	return 1;
+};
+static int luags_GUIControl_get_AsListBox(lua_State *L) {
+	AGS_GUIControl* self = luags_checkGUIControl(L, 1, GUICONTROL_UV_META);
+	luags_pushListBox(L, AGS_GUIControl_get_AsListBox(self), GUICONTROL_UV_LISTBOX_META, GUICONTROL_UV_LISTBOX_STORE);
+	return 1;
+};
+static int luags_GUIControl_get_AsSlider(lua_State *L) {
+	AGS_GUIControl* self = luags_checkGUIControl(L, 1, GUICONTROL_UV_META);
+	luags_pushSlider(L, AGS_GUIControl_get_AsSlider(self), GUICONTROL_UV_SLIDER_META, GUICONTROL_UV_SLIDER_STORE);
+	return 1;
+};
+static int luags_GUIControl_get_AsTextBox(lua_State *L) {
+	AGS_GUIControl* self = luags_checkGUIControl(L, 1, GUICONTROL_UV_META);
+	luags_pushTextBox(L, AGS_GUIControl_get_AsTextBox(self), GUICONTROL_UV_TEXTBOX_META, GUICONTROL_UV_TEXTBOX_STORE);
+	return 1;
+};
+static int luags_GUIControl_get_Clickable(lua_State *L) {
+	AGS_GUIControl* self = luags_checkGUIControl(L, 1, GUICONTROL_UV_META);
+	lua_pushboolean(L, AGS_GUIControl_get_Clickable(self));
+	return 1;
+};
+static int luags_GUIControl_set_Clickable(lua_State *L) {
+	AGS_GUIControl* self = luags_checkGUIControl(L, 1, GUICONTROL_UV_META);
+	AGS_GUIControl_set_Clickable(self, llh_checkboolean(L,2));
+	return 0;
+};
+static int luags_GUIControl_get_Enabled(lua_State *L) {
+	AGS_GUIControl* self = luags_checkGUIControl(L, 1, GUICONTROL_UV_META);
+	lua_pushboolean(L, AGS_GUIControl_get_Enabled(self));
+	return 1;
+};
+static int luags_GUIControl_set_Enabled(lua_State *L) {
+	AGS_GUIControl* self = luags_checkGUIControl(L, 1, GUICONTROL_UV_META);
+	AGS_GUIControl_set_Enabled(self, llh_checkboolean(L,2));
+	return 0;
+};
+static int luags_GUIControl_get_Height(lua_State *L) {
+	AGS_GUIControl* self = luags_checkGUIControl(L, 1, GUICONTROL_UV_META);
+	lua_pushinteger(L, AGS_GUIControl_get_Height(self));
+	return 1;
+};
+static int luags_GUIControl_set_Height(lua_State *L) {
+	AGS_GUIControl* self = luags_checkGUIControl(L, 1, GUICONTROL_UV_META);
+	AGS_GUIControl_set_Height(self, (int)luaL_checkint(L,2));
+	return 0;
+};
+static int luags_GUIControl_get_ID(lua_State *L) {
+	AGS_GUIControl* self = luags_checkGUIControl(L, 1, GUICONTROL_UV_META);
+	lua_pushinteger(L, AGS_GUIControl_get_ID(self));
+	return 1;
+};
+static int luags_GUIControl_get_OwningGUI(lua_State *L) {
+	AGS_GUIControl* self = luags_checkGUIControl(L, 1, GUICONTROL_UV_META);
+	luags_pushGUI(L, AGS_GUIControl_get_OwningGUI(self), GUICONTROL_UV_GUI_META, GUICONTROL_UV_GUI_STORE);
+	return 1;
+};
+static int luags_GUIControl_get_Visible(lua_State *L) {
+	AGS_GUIControl* self = luags_checkGUIControl(L, 1, GUICONTROL_UV_META);
+	lua_pushboolean(L, AGS_GUIControl_get_Visible(self));
+	return 1;
+};
+static int luags_GUIControl_set_Visible(lua_State *L) {
+	AGS_GUIControl* self = luags_checkGUIControl(L, 1, GUICONTROL_UV_META);
+	AGS_GUIControl_set_Visible(self, llh_checkboolean(L,2));
+	return 0;
+};
+static int luags_GUIControl_get_Width(lua_State *L) {
+	AGS_GUIControl* self = luags_checkGUIControl(L, 1, GUICONTROL_UV_META);
+	lua_pushinteger(L, AGS_GUIControl_get_Width(self));
+	return 1;
+};
+static int luags_GUIControl_set_Width(lua_State *L) {
+	AGS_GUIControl* self = luags_checkGUIControl(L, 1, GUICONTROL_UV_META);
+	AGS_GUIControl_set_Width(self, (int)luaL_checkint(L,2));
+	return 0;
+};
+static int luags_GUIControl_get_X(lua_State *L) {
+	AGS_GUIControl* self = luags_checkGUIControl(L, 1, GUICONTROL_UV_META);
+	lua_pushinteger(L, AGS_GUIControl_get_X(self));
+	return 1;
+};
+static int luags_GUIControl_set_X(lua_State *L) {
+	AGS_GUIControl* self = luags_checkGUIControl(L, 1, GUICONTROL_UV_META);
+	AGS_GUIControl_set_X(self, (int)luaL_checkint(L,2));
+	return 0;
+};
+static int luags_GUIControl_get_Y(lua_State *L) {
+	AGS_GUIControl* self = luags_checkGUIControl(L, 1, GUICONTROL_UV_META);
+	lua_pushinteger(L, AGS_GUIControl_get_Y(self));
+	return 1;
+};
+static int luags_GUIControl_set_Y(lua_State *L) {
+	AGS_GUIControl* self = luags_checkGUIControl(L, 1, GUICONTROL_UV_META);
+	AGS_GUIControl_set_Y(self, (int)luaL_checkint(L,2));
+	return 0;
+};
+#undef GUICONTROL_UV_LISTBOX_META
+#undef GUICONTROL_UV_LISTBOX_STORE
+#undef GUICONTROL_UV_GUI_META
+#undef GUICONTROL_UV_GUI_STORE
+#undef GUICONTROL_UV_TEXTBOX_META
+#undef GUICONTROL_UV_TEXTBOX_STORE
+#undef GUICONTROL_UV_LABEL_META
+#undef GUICONTROL_UV_LABEL_STORE
+#undef GUICONTROL_UV_BUTTON_META
+#undef GUICONTROL_UV_BUTTON_STORE
+#undef GUICONTROL_UV_META
+#undef GUICONTROL_UV_STORE
+#undef GUICONTROL_UV_INVWINDOW_META
+#undef GUICONTROL_UV_INVWINDOW_STORE
+#undef GUICONTROL_UV_SLIDER_META
+#undef GUICONTROL_UV_SLIDER_STORE
+
+int luaopen_ags_GUIControl(lua_State *L) {
+	int IDX_LIB, IDX_LIB_META;
+	int IDX_LISTBOX_META;
+	int IDX_LISTBOX_STORE;
+	int IDX_GUI_META;
+	int IDX_GUI_STORE;
+	int IDX_TEXTBOX_META;
+	int IDX_TEXTBOX_STORE;
+	int IDX_LABEL_META;
+	int IDX_LABEL_STORE;
+	int IDX_BUTTON_META;
+	int IDX_BUTTON_STORE;
+	int IDX_GUICONTROL_META;
+	int IDX_GUICONTROL_STORE;
+	int IDX_INVWINDOW_META;
+	int IDX_INVWINDOW_STORE;
+	int IDX_SLIDER_META;
+	int IDX_SLIDER_STORE;
+	luaL_register(L, "ags.GUIControl", llh_null_lib);
+	IDX_LIB = lua_gettop(L);
+	lua_createtable(L,0,2);
+	IDX_LIB_META = lua_gettop(L);
+	lua_pushvalue(L,IDX_LIB_META);
+	lua_setmetatable(L,IDX_LIB);
+	luaL_newmetatable(L, "AGS_ListBox*");
+	IDX_LISTBOX_META = lua_gettop(L);
+	luaL_newmetatable(L, IMMORTAL_OBJECT_STORE);
+	IDX_LISTBOX_STORE = lua_gettop(L);
+	luaL_newmetatable(L, "AGS_GUI*");
+	IDX_GUI_META = lua_gettop(L);
+	luaL_newmetatable(L, IMMORTAL_OBJECT_STORE);
+	IDX_GUI_STORE = lua_gettop(L);
+	luaL_newmetatable(L, "AGS_TextBox*");
+	IDX_TEXTBOX_META = lua_gettop(L);
+	luaL_newmetatable(L, IMMORTAL_OBJECT_STORE);
+	IDX_TEXTBOX_STORE = lua_gettop(L);
+	luaL_newmetatable(L, "AGS_Label*");
+	IDX_LABEL_META = lua_gettop(L);
+	luaL_newmetatable(L, IMMORTAL_OBJECT_STORE);
+	IDX_LABEL_STORE = lua_gettop(L);
+	luaL_newmetatable(L, "AGS_Button*");
+	IDX_BUTTON_META = lua_gettop(L);
+	luaL_newmetatable(L, IMMORTAL_OBJECT_STORE);
+	IDX_BUTTON_STORE = lua_gettop(L);
+	luaL_newmetatable(L, "AGS_GUIControl*");
+	IDX_GUICONTROL_META = lua_gettop(L);
+	luaL_newmetatable(L, "AGS_GUIControl* store");
+	IDX_GUICONTROL_STORE = lua_gettop(L);
+	luaL_newmetatable(L, "AGS_InvWindow*");
+	IDX_INVWINDOW_META = lua_gettop(L);
+	luaL_newmetatable(L, IMMORTAL_OBJECT_STORE);
+	IDX_INVWINDOW_STORE = lua_gettop(L);
+	luaL_newmetatable(L, "AGS_Slider*");
+	IDX_SLIDER_META = lua_gettop(L);
+	luaL_newmetatable(L, IMMORTAL_OBJECT_STORE);
+	IDX_SLIDER_STORE = lua_gettop(L);
+	lua_getglobal(L, "agsinternal");
+	lua_getfield(L, -1, "initlib");
+	lua_pushvalue(L, IDX_LIB);
+	lua_pushvalue(L, IDX_LIB_META);
+	lua_pushvalue(L, IDX_GUICONTROL_META);
+	lua_pushboolean(L, 1);
+	lua_call(L,4,0);
+	lua_pop(L,1); // agsinternal
+	
+	#define ADD_MEMBER(name,f) { \
+		lua_pushliteral(L, #name); \
+		lua_pushvalue(L, IDX_LISTBOX_META); \
+		lua_pushvalue(L, IDX_LISTBOX_STORE); \
+		lua_pushvalue(L, IDX_GUI_META); \
+		lua_pushvalue(L, IDX_GUI_STORE); \
+		lua_pushvalue(L, IDX_TEXTBOX_META); \
+		lua_pushvalue(L, IDX_TEXTBOX_STORE); \
+		lua_pushvalue(L, IDX_LABEL_META); \
+		lua_pushvalue(L, IDX_LABEL_STORE); \
+		lua_pushvalue(L, IDX_BUTTON_META); \
+		lua_pushvalue(L, IDX_BUTTON_STORE); \
+		lua_pushvalue(L, IDX_GUICONTROL_META); \
+		lua_pushvalue(L, IDX_GUICONTROL_STORE); \
+		lua_pushvalue(L, IDX_INVWINDOW_META); \
+		lua_pushvalue(L, IDX_INVWINDOW_STORE); \
+		lua_pushvalue(L, IDX_SLIDER_META); \
+		lua_pushvalue(L, IDX_SLIDER_STORE); \
+		lua_pushcclosure(L, f, 16); \
+		lua_rawset(L, IDX_LIB); \
+	}
+	#define ADD_METHOD(name) { if (AGS_GUIControl_##name) { ADD_MEMBER(name, luags_GUIControl_##name); } }
+	ADD_METHOD(BringToFront);
+	ADD_METHOD(GetAtScreenXY);
+	ADD_METHOD(SendToBack);
+	ADD_METHOD(SetPosition);
+	ADD_METHOD(SetSize);
+	ADD_METHOD(get_AsButton);
+	ADD_METHOD(get_AsInvWindow);
+	ADD_METHOD(get_AsLabel);
+	ADD_METHOD(get_AsListBox);
+	ADD_METHOD(get_AsSlider);
+	ADD_METHOD(get_AsTextBox);
+	ADD_METHOD(get_Clickable);
+	ADD_METHOD(set_Clickable);
+	ADD_METHOD(get_Enabled);
+	ADD_METHOD(set_Enabled);
+	ADD_METHOD(get_Height);
+	ADD_METHOD(set_Height);
+	ADD_METHOD(get_ID);
+	ADD_METHOD(get_OwningGUI);
+	ADD_METHOD(get_Visible);
+	ADD_METHOD(set_Visible);
+	ADD_METHOD(get_Width);
+	ADD_METHOD(set_Width);
+	ADD_METHOD(get_X);
+	ADD_METHOD(set_X);
+	ADD_METHOD(get_Y);
+	ADD_METHOD(set_Y);
+	#undef ADD_METHOD
+	#undef ADD_MEMBER
+	
+	lua_settop(L,IDX_LIB);
+	return 1;
+};
+
+// Label Lua wrappers
+#define LABEL_UV_GUI_META lua_upvalueindex(1)
+#define LABEL_UV_GUI_STORE lua_upvalueindex(2)
+#define LABEL_UV_META lua_upvalueindex(3)
+#define LABEL_UV_STORE lua_upvalueindex(4)
+static int luags_Label_BringToFront(lua_State *L) {
+	AGS_Label* self = luags_checkLabel(L, 1, LABEL_UV_META);
+	AGS_GUIControl_BringToFront((AGS_GUIControl*)self);
+	return 0;
+};
+static int luags_Label_SendToBack(lua_State *L) {
+	AGS_Label* self = luags_checkLabel(L, 1, LABEL_UV_META);
+	AGS_GUIControl_SendToBack((AGS_GUIControl*)self);
+	return 0;
+};
+static int luags_Label_SetPosition(lua_State *L) {
+	AGS_Label* self = luags_checkLabel(L, 1, LABEL_UV_META);
+	AGS_GUIControl_SetPosition((AGS_GUIControl*)self, (int)luaL_checkint(L,2), (int)luaL_checkint(L,3));
+	return 0;
+};
+static int luags_Label_SetSize(lua_State *L) {
+	AGS_Label* self = luags_checkLabel(L, 1, LABEL_UV_META);
+	AGS_GUIControl_SetSize((AGS_GUIControl*)self, (int)luaL_checkint(L,2), (int)luaL_checkint(L,3));
+	return 0;
+};
+static int luags_Label_get_Clickable(lua_State *L) {
+	AGS_Label* self = luags_checkLabel(L, 1, LABEL_UV_META);
+	lua_pushboolean(L, AGS_GUIControl_get_Clickable((AGS_GUIControl*)self));
+	return 1;
+};
+static int luags_Label_set_Clickable(lua_State *L) {
+	AGS_Label* self = luags_checkLabel(L, 1, LABEL_UV_META);
+	AGS_GUIControl_set_Clickable((AGS_GUIControl*)self, llh_checkboolean(L,2));
+	return 0;
+};
+static int luags_Label_get_Enabled(lua_State *L) {
+	AGS_Label* self = luags_checkLabel(L, 1, LABEL_UV_META);
+	lua_pushboolean(L, AGS_GUIControl_get_Enabled((AGS_GUIControl*)self));
+	return 1;
+};
+static int luags_Label_set_Enabled(lua_State *L) {
+	AGS_Label* self = luags_checkLabel(L, 1, LABEL_UV_META);
+	AGS_GUIControl_set_Enabled((AGS_GUIControl*)self, llh_checkboolean(L,2));
+	return 0;
+};
+static int luags_Label_get_Height(lua_State *L) {
+	AGS_Label* self = luags_checkLabel(L, 1, LABEL_UV_META);
+	lua_pushinteger(L, AGS_GUIControl_get_Height((AGS_GUIControl*)self));
+	return 1;
+};
+static int luags_Label_set_Height(lua_State *L) {
+	AGS_Label* self = luags_checkLabel(L, 1, LABEL_UV_META);
+	AGS_GUIControl_set_Height((AGS_GUIControl*)self, (int)luaL_checkint(L,2));
+	return 0;
+};
+static int luags_Label_get_ID(lua_State *L) {
+	AGS_Label* self = luags_checkLabel(L, 1, LABEL_UV_META);
+	lua_pushinteger(L, AGS_GUIControl_get_ID((AGS_GUIControl*)self));
+	return 1;
+};
+static int luags_Label_get_OwningGUI(lua_State *L) {
+	AGS_Label* self = luags_checkLabel(L, 1, LABEL_UV_META);
+	luags_pushGUI(L, AGS_GUIControl_get_OwningGUI((AGS_GUIControl*)self), LABEL_UV_GUI_META, LABEL_UV_GUI_STORE);
+	return 1;
+};
+static int luags_Label_get_Visible(lua_State *L) {
+	AGS_Label* self = luags_checkLabel(L, 1, LABEL_UV_META);
+	lua_pushboolean(L, AGS_GUIControl_get_Visible((AGS_GUIControl*)self));
+	return 1;
+};
+static int luags_Label_set_Visible(lua_State *L) {
+	AGS_Label* self = luags_checkLabel(L, 1, LABEL_UV_META);
+	AGS_GUIControl_set_Visible((AGS_GUIControl*)self, llh_checkboolean(L,2));
+	return 0;
+};
+static int luags_Label_get_Width(lua_State *L) {
+	AGS_Label* self = luags_checkLabel(L, 1, LABEL_UV_META);
+	lua_pushinteger(L, AGS_GUIControl_get_Width((AGS_GUIControl*)self));
+	return 1;
+};
+static int luags_Label_set_Width(lua_State *L) {
+	AGS_Label* self = luags_checkLabel(L, 1, LABEL_UV_META);
+	AGS_GUIControl_set_Width((AGS_GUIControl*)self, (int)luaL_checkint(L,2));
+	return 0;
+};
+static int luags_Label_get_X(lua_State *L) {
+	AGS_Label* self = luags_checkLabel(L, 1, LABEL_UV_META);
+	lua_pushinteger(L, AGS_GUIControl_get_X((AGS_GUIControl*)self));
+	return 1;
+};
+static int luags_Label_set_X(lua_State *L) {
+	AGS_Label* self = luags_checkLabel(L, 1, LABEL_UV_META);
+	AGS_GUIControl_set_X((AGS_GUIControl*)self, (int)luaL_checkint(L,2));
+	return 0;
+};
+static int luags_Label_get_Y(lua_State *L) {
+	AGS_Label* self = luags_checkLabel(L, 1, LABEL_UV_META);
+	lua_pushinteger(L, AGS_GUIControl_get_Y((AGS_GUIControl*)self));
+	return 1;
+};
+static int luags_Label_set_Y(lua_State *L) {
+	AGS_Label* self = luags_checkLabel(L, 1, LABEL_UV_META);
+	AGS_GUIControl_set_Y((AGS_GUIControl*)self, (int)luaL_checkint(L,2));
+	return 0;
+};
+static int luags_Label_get_Font(lua_State *L) {
+	AGS_Label* self = luags_checkLabel(L, 1, LABEL_UV_META);
+	luags_pushFontType(L, AGS_Label_get_Font(self));
+	return 1;
+};
+static int luags_Label_set_Font(lua_State *L) {
+	AGS_Label* self = luags_checkLabel(L, 1, LABEL_UV_META);
+	AGS_Label_set_Font(self, luags_checkFontType(L,2));
+	return 0;
+};
+static int luags_Label_get_Text(lua_State *L) {
+	AGS_Label* self = luags_checkLabel(L, 1, LABEL_UV_META);
+	lua_pushstring(L, AGS_Label_get_Text(self));
+	return 1;
+};
+static int luags_Label_set_Text(lua_State *L) {
+	AGS_Label* self = luags_checkLabel(L, 1, LABEL_UV_META);
+	AGS_Label_set_Text(self, luaL_checkstring(L,2));
+	return 0;
+};
+static int luags_Label_get_TextColor(lua_State *L) {
+	AGS_Label* self = luags_checkLabel(L, 1, LABEL_UV_META);
+	lua_pushinteger(L, AGS_Label_get_TextColor(self));
+	return 1;
+};
+static int luags_Label_set_TextColor(lua_State *L) {
+	AGS_Label* self = luags_checkLabel(L, 1, LABEL_UV_META);
+	AGS_Label_set_TextColor(self, (int)luaL_checkint(L,2));
+	return 0;
+};
+#undef LABEL_UV_GUI_META
+#undef LABEL_UV_GUI_STORE
+#undef LABEL_UV_META
+#undef LABEL_UV_STORE
+
+int luaopen_ags_Label(lua_State *L) {
+	int IDX_LIB, IDX_LIB_META;
+	int IDX_GUI_META;
+	int IDX_GUI_STORE;
+	int IDX_LABEL_META;
+	int IDX_LABEL_STORE;
+	luaL_register(L, "ags.Label", llh_null_lib);
+	IDX_LIB = lua_gettop(L);
+	lua_createtable(L,0,2);
+	IDX_LIB_META = lua_gettop(L);
+	lua_pushvalue(L,IDX_LIB_META);
+	lua_setmetatable(L,IDX_LIB);
+	luaL_newmetatable(L, "AGS_GUI*");
+	IDX_GUI_META = lua_gettop(L);
+	luaL_newmetatable(L, IMMORTAL_OBJECT_STORE);
+	IDX_GUI_STORE = lua_gettop(L);
+	luaL_newmetatable(L, "AGS_Label*");
+	IDX_LABEL_META = lua_gettop(L);
+	luaL_newmetatable(L, IMMORTAL_OBJECT_STORE);
+	IDX_LABEL_STORE = lua_gettop(L);
+	lua_getglobal(L, "agsinternal");
+	lua_getfield(L, -1, "initlib");
+	lua_pushvalue(L, IDX_LIB);
+	lua_pushvalue(L, IDX_LIB_META);
+	lua_pushvalue(L, IDX_LABEL_META);
+	lua_pushboolean(L, 1);
+	lua_call(L,4,0);
+	lua_pop(L,1); // agsinternal
+	
+	#define ADD_MEMBER(name,f) { \
+		lua_pushliteral(L, #name); \
+		lua_pushvalue(L, IDX_GUI_META); \
+		lua_pushvalue(L, IDX_GUI_STORE); \
+		lua_pushvalue(L, IDX_LABEL_META); \
+		lua_pushvalue(L, IDX_LABEL_STORE); \
+		lua_pushcclosure(L, f, 4); \
+		lua_rawset(L, IDX_LIB); \
+	}
+	#define ADD_METHOD(name) { if (AGS_Label_##name) { ADD_MEMBER(name, luags_Label_##name); } }
+	#define INHERIT_METHOD(name,from) { if (AGS_##from##_##name) { ADD_MEMBER(name, luags_Label_##name); } }
+	ADD_METHOD(get_Font);
+	ADD_METHOD(set_Font);
+	ADD_METHOD(get_Text);
+	ADD_METHOD(set_Text);
+	ADD_METHOD(get_TextColor);
+	ADD_METHOD(set_TextColor);
+	INHERIT_METHOD(BringToFront, GUIControl);
+	INHERIT_METHOD(SendToBack, GUIControl);
+	INHERIT_METHOD(SetPosition, GUIControl);
+	INHERIT_METHOD(SetSize, GUIControl);
+	INHERIT_METHOD(get_Clickable, GUIControl);
+	INHERIT_METHOD(set_Clickable, GUIControl);
+	INHERIT_METHOD(get_Enabled, GUIControl);
+	INHERIT_METHOD(set_Enabled, GUIControl);
+	INHERIT_METHOD(get_Height, GUIControl);
+	INHERIT_METHOD(set_Height, GUIControl);
+	INHERIT_METHOD(get_ID, GUIControl);
+	INHERIT_METHOD(get_OwningGUI, GUIControl);
+	INHERIT_METHOD(get_Visible, GUIControl);
+	INHERIT_METHOD(set_Visible, GUIControl);
+	INHERIT_METHOD(get_Width, GUIControl);
+	INHERIT_METHOD(set_Width, GUIControl);
+	INHERIT_METHOD(get_X, GUIControl);
+	INHERIT_METHOD(set_X, GUIControl);
+	INHERIT_METHOD(get_Y, GUIControl);
+	INHERIT_METHOD(set_Y, GUIControl);
+	#undef ADD_METHOD
+	#undef INHERIT_METHOD
+	#undef ADD_MEMBER
+	
+	lua_settop(L,IDX_LIB);
+	return 1;
+};
+
+// Button Lua wrappers
+#define BUTTON_UV_META lua_upvalueindex(1)
+#define BUTTON_UV_STORE lua_upvalueindex(2)
+#define BUTTON_UV_GUI_META lua_upvalueindex(3)
+#define BUTTON_UV_GUI_STORE lua_upvalueindex(4)
+static int luags_Button_BringToFront(lua_State *L) {
+	AGS_Button* self = luags_checkButton(L, 1, BUTTON_UV_META);
+	AGS_GUIControl_BringToFront((AGS_GUIControl*)self);
+	return 0;
+};
+static int luags_Button_SendToBack(lua_State *L) {
+	AGS_Button* self = luags_checkButton(L, 1, BUTTON_UV_META);
+	AGS_GUIControl_SendToBack((AGS_GUIControl*)self);
+	return 0;
+};
+static int luags_Button_SetPosition(lua_State *L) {
+	AGS_Button* self = luags_checkButton(L, 1, BUTTON_UV_META);
+	AGS_GUIControl_SetPosition((AGS_GUIControl*)self, (int)luaL_checkint(L,2), (int)luaL_checkint(L,3));
+	return 0;
+};
+static int luags_Button_SetSize(lua_State *L) {
+	AGS_Button* self = luags_checkButton(L, 1, BUTTON_UV_META);
+	AGS_GUIControl_SetSize((AGS_GUIControl*)self, (int)luaL_checkint(L,2), (int)luaL_checkint(L,3));
+	return 0;
+};
+static int luags_Button_get_Clickable(lua_State *L) {
+	AGS_Button* self = luags_checkButton(L, 1, BUTTON_UV_META);
+	lua_pushboolean(L, AGS_GUIControl_get_Clickable((AGS_GUIControl*)self));
+	return 1;
+};
+static int luags_Button_set_Clickable(lua_State *L) {
+	AGS_Button* self = luags_checkButton(L, 1, BUTTON_UV_META);
+	AGS_GUIControl_set_Clickable((AGS_GUIControl*)self, llh_checkboolean(L,2));
+	return 0;
+};
+static int luags_Button_get_Enabled(lua_State *L) {
+	AGS_Button* self = luags_checkButton(L, 1, BUTTON_UV_META);
+	lua_pushboolean(L, AGS_GUIControl_get_Enabled((AGS_GUIControl*)self));
+	return 1;
+};
+static int luags_Button_set_Enabled(lua_State *L) {
+	AGS_Button* self = luags_checkButton(L, 1, BUTTON_UV_META);
+	AGS_GUIControl_set_Enabled((AGS_GUIControl*)self, llh_checkboolean(L,2));
+	return 0;
+};
+static int luags_Button_get_Height(lua_State *L) {
+	AGS_Button* self = luags_checkButton(L, 1, BUTTON_UV_META);
+	lua_pushinteger(L, AGS_GUIControl_get_Height((AGS_GUIControl*)self));
+	return 1;
+};
+static int luags_Button_set_Height(lua_State *L) {
+	AGS_Button* self = luags_checkButton(L, 1, BUTTON_UV_META);
+	AGS_GUIControl_set_Height((AGS_GUIControl*)self, (int)luaL_checkint(L,2));
+	return 0;
+};
+static int luags_Button_get_ID(lua_State *L) {
+	AGS_Button* self = luags_checkButton(L, 1, BUTTON_UV_META);
+	lua_pushinteger(L, AGS_GUIControl_get_ID((AGS_GUIControl*)self));
+	return 1;
+};
+static int luags_Button_get_OwningGUI(lua_State *L) {
+	AGS_Button* self = luags_checkButton(L, 1, BUTTON_UV_META);
+	luags_pushGUI(L, AGS_GUIControl_get_OwningGUI((AGS_GUIControl*)self), BUTTON_UV_GUI_META, BUTTON_UV_GUI_STORE);
+	return 1;
+};
+static int luags_Button_get_Visible(lua_State *L) {
+	AGS_Button* self = luags_checkButton(L, 1, BUTTON_UV_META);
+	lua_pushboolean(L, AGS_GUIControl_get_Visible((AGS_GUIControl*)self));
+	return 1;
+};
+static int luags_Button_set_Visible(lua_State *L) {
+	AGS_Button* self = luags_checkButton(L, 1, BUTTON_UV_META);
+	AGS_GUIControl_set_Visible((AGS_GUIControl*)self, llh_checkboolean(L,2));
+	return 0;
+};
+static int luags_Button_get_Width(lua_State *L) {
+	AGS_Button* self = luags_checkButton(L, 1, BUTTON_UV_META);
+	lua_pushinteger(L, AGS_GUIControl_get_Width((AGS_GUIControl*)self));
+	return 1;
+};
+static int luags_Button_set_Width(lua_State *L) {
+	AGS_Button* self = luags_checkButton(L, 1, BUTTON_UV_META);
+	AGS_GUIControl_set_Width((AGS_GUIControl*)self, (int)luaL_checkint(L,2));
+	return 0;
+};
+static int luags_Button_get_X(lua_State *L) {
+	AGS_Button* self = luags_checkButton(L, 1, BUTTON_UV_META);
+	lua_pushinteger(L, AGS_GUIControl_get_X((AGS_GUIControl*)self));
+	return 1;
+};
+static int luags_Button_set_X(lua_State *L) {
+	AGS_Button* self = luags_checkButton(L, 1, BUTTON_UV_META);
+	AGS_GUIControl_set_X((AGS_GUIControl*)self, (int)luaL_checkint(L,2));
+	return 0;
+};
+static int luags_Button_get_Y(lua_State *L) {
+	AGS_Button* self = luags_checkButton(L, 1, BUTTON_UV_META);
+	lua_pushinteger(L, AGS_GUIControl_get_Y((AGS_GUIControl*)self));
+	return 1;
+};
+static int luags_Button_set_Y(lua_State *L) {
+	AGS_Button* self = luags_checkButton(L, 1, BUTTON_UV_META);
+	AGS_GUIControl_set_Y((AGS_GUIControl*)self, (int)luaL_checkint(L,2));
+	return 0;
+};
+static int luags_Button_Animate(lua_State *L) {
+	AGS_Button* self = luags_checkButton(L, 1, BUTTON_UV_META);
+	AGS_Button_Animate(self, (int)luaL_checkint(L,2), (int)luaL_checkint(L,3), (int)luaL_checkint(L,4), luags_checkRepeatStyle(L,5));
+	return 0;
+};
+static int luags_Button_get_ClipImage(lua_State *L) {
+	AGS_Button* self = luags_checkButton(L, 1, BUTTON_UV_META);
+	lua_pushboolean(L, AGS_Button_get_ClipImage(self));
+	return 1;
+};
+static int luags_Button_set_ClipImage(lua_State *L) {
+	AGS_Button* self = luags_checkButton(L, 1, BUTTON_UV_META);
+	AGS_Button_set_ClipImage(self, llh_checkboolean(L,2));
+	return 0;
+};
+static int luags_Button_get_Font(lua_State *L) {
+	AGS_Button* self = luags_checkButton(L, 1, BUTTON_UV_META);
+	luags_pushFontType(L, AGS_Button_get_Font(self));
+	return 1;
+};
+static int luags_Button_set_Font(lua_State *L) {
+	AGS_Button* self = luags_checkButton(L, 1, BUTTON_UV_META);
+	AGS_Button_set_Font(self, luags_checkFontType(L,2));
+	return 0;
+};
+static int luags_Button_get_Graphic(lua_State *L) {
+	AGS_Button* self = luags_checkButton(L, 1, BUTTON_UV_META);
+	lua_pushinteger(L, AGS_Button_get_Graphic(self));
+	return 1;
+};
+static int luags_Button_get_MouseOverGraphic(lua_State *L) {
+	AGS_Button* self = luags_checkButton(L, 1, BUTTON_UV_META);
+	lua_pushinteger(L, AGS_Button_get_MouseOverGraphic(self));
+	return 1;
+};
+static int luags_Button_set_MouseOverGraphic(lua_State *L) {
+	AGS_Button* self = luags_checkButton(L, 1, BUTTON_UV_META);
+	AGS_Button_set_MouseOverGraphic(self, (int)luaL_checkint(L,2));
+	return 0;
+};
+static int luags_Button_get_NormalGraphic(lua_State *L) {
+	AGS_Button* self = luags_checkButton(L, 1, BUTTON_UV_META);
+	lua_pushinteger(L, AGS_Button_get_NormalGraphic(self));
+	return 1;
+};
+static int luags_Button_set_NormalGraphic(lua_State *L) {
+	AGS_Button* self = luags_checkButton(L, 1, BUTTON_UV_META);
+	AGS_Button_set_NormalGraphic(self, (int)luaL_checkint(L,2));
+	return 0;
+};
+static int luags_Button_get_PushedGraphic(lua_State *L) {
+	AGS_Button* self = luags_checkButton(L, 1, BUTTON_UV_META);
+	lua_pushinteger(L, AGS_Button_get_PushedGraphic(self));
+	return 1;
+};
+static int luags_Button_set_PushedGraphic(lua_State *L) {
+	AGS_Button* self = luags_checkButton(L, 1, BUTTON_UV_META);
+	AGS_Button_set_PushedGraphic(self, (int)luaL_checkint(L,2));
+	return 0;
+};
+static int luags_Button_get_TextColor(lua_State *L) {
+	AGS_Button* self = luags_checkButton(L, 1, BUTTON_UV_META);
+	lua_pushinteger(L, AGS_Button_get_TextColor(self));
+	return 1;
+};
+static int luags_Button_set_TextColor(lua_State *L) {
+	AGS_Button* self = luags_checkButton(L, 1, BUTTON_UV_META);
+	AGS_Button_set_TextColor(self, (int)luaL_checkint(L,2));
+	return 0;
+};
+static int luags_Button_get_Text(lua_State *L) {
+	AGS_Button* self = luags_checkButton(L, 1, BUTTON_UV_META);
+	lua_pushstring(L, AGS_Button_get_Text(self));
+	return 1;
+};
+static int luags_Button_set_Text(lua_State *L) {
+	AGS_Button* self = luags_checkButton(L, 1, BUTTON_UV_META);
+	AGS_Button_set_Text(self, luaL_checkstring(L,2));
+	return 0;
+};
+#undef BUTTON_UV_META
+#undef BUTTON_UV_STORE
+#undef BUTTON_UV_GUI_META
+#undef BUTTON_UV_GUI_STORE
+
+int luaopen_ags_Button(lua_State *L) {
+	int IDX_LIB, IDX_LIB_META;
+	int IDX_BUTTON_META;
+	int IDX_BUTTON_STORE;
+	int IDX_GUI_META;
+	int IDX_GUI_STORE;
+	luaL_register(L, "ags.Button", llh_null_lib);
+	IDX_LIB = lua_gettop(L);
+	lua_createtable(L,0,2);
+	IDX_LIB_META = lua_gettop(L);
+	lua_pushvalue(L,IDX_LIB_META);
+	lua_setmetatable(L,IDX_LIB);
+	luaL_newmetatable(L, "AGS_Button*");
+	IDX_BUTTON_META = lua_gettop(L);
+	luaL_newmetatable(L, IMMORTAL_OBJECT_STORE);
+	IDX_BUTTON_STORE = lua_gettop(L);
+	luaL_newmetatable(L, "AGS_GUI*");
+	IDX_GUI_META = lua_gettop(L);
+	luaL_newmetatable(L, IMMORTAL_OBJECT_STORE);
+	IDX_GUI_STORE = lua_gettop(L);
+	lua_getglobal(L, "agsinternal");
+	lua_getfield(L, -1, "initlib");
+	lua_pushvalue(L, IDX_LIB);
+	lua_pushvalue(L, IDX_LIB_META);
+	lua_pushvalue(L, IDX_BUTTON_META);
+	lua_pushboolean(L, 1);
+	lua_call(L,4,0);
+	lua_pop(L,1); // agsinternal
+	
+	#define ADD_MEMBER(name,f) { \
+		lua_pushliteral(L, #name); \
+		lua_pushvalue(L, IDX_BUTTON_META); \
+		lua_pushvalue(L, IDX_BUTTON_STORE); \
+		lua_pushvalue(L, IDX_GUI_META); \
+		lua_pushvalue(L, IDX_GUI_STORE); \
+		lua_pushcclosure(L, f, 4); \
+		lua_rawset(L, IDX_LIB); \
+	}
+	#define ADD_METHOD(name) { if (AGS_Button_##name) { ADD_MEMBER(name, luags_Button_##name); } }
+	#define INHERIT_METHOD(name,from) { if (AGS_##from##_##name) { ADD_MEMBER(name, luags_Button_##name); } }
+	ADD_METHOD(Animate);
+	ADD_METHOD(get_ClipImage);
+	ADD_METHOD(set_ClipImage);
+	ADD_METHOD(get_Font);
+	ADD_METHOD(set_Font);
+	ADD_METHOD(get_Graphic);
+	ADD_METHOD(get_MouseOverGraphic);
+	ADD_METHOD(set_MouseOverGraphic);
+	ADD_METHOD(get_NormalGraphic);
+	ADD_METHOD(set_NormalGraphic);
+	ADD_METHOD(get_PushedGraphic);
+	ADD_METHOD(set_PushedGraphic);
+	ADD_METHOD(get_TextColor);
+	ADD_METHOD(set_TextColor);
+	ADD_METHOD(get_Text);
+	ADD_METHOD(set_Text);
+	INHERIT_METHOD(BringToFront, GUIControl);
+	INHERIT_METHOD(SendToBack, GUIControl);
+	INHERIT_METHOD(SetPosition, GUIControl);
+	INHERIT_METHOD(SetSize, GUIControl);
+	INHERIT_METHOD(get_Clickable, GUIControl);
+	INHERIT_METHOD(set_Clickable, GUIControl);
+	INHERIT_METHOD(get_Enabled, GUIControl);
+	INHERIT_METHOD(set_Enabled, GUIControl);
+	INHERIT_METHOD(get_Height, GUIControl);
+	INHERIT_METHOD(set_Height, GUIControl);
+	INHERIT_METHOD(get_ID, GUIControl);
+	INHERIT_METHOD(get_OwningGUI, GUIControl);
+	INHERIT_METHOD(get_Visible, GUIControl);
+	INHERIT_METHOD(set_Visible, GUIControl);
+	INHERIT_METHOD(get_Width, GUIControl);
+	INHERIT_METHOD(set_Width, GUIControl);
+	INHERIT_METHOD(get_X, GUIControl);
+	INHERIT_METHOD(set_X, GUIControl);
+	INHERIT_METHOD(get_Y, GUIControl);
+	INHERIT_METHOD(set_Y, GUIControl);
+	#undef ADD_METHOD
+	#undef INHERIT_METHOD
+	#undef ADD_MEMBER
+	
+	lua_settop(L,IDX_LIB);
+	return 1;
+};
+
+// Slider Lua wrappers
+#define SLIDER_UV_GUI_META lua_upvalueindex(1)
+#define SLIDER_UV_GUI_STORE lua_upvalueindex(2)
+#define SLIDER_UV_META lua_upvalueindex(3)
+#define SLIDER_UV_STORE lua_upvalueindex(4)
+static int luags_Slider_BringToFront(lua_State *L) {
+	AGS_Slider* self = luags_checkSlider(L, 1, SLIDER_UV_META);
+	AGS_GUIControl_BringToFront((AGS_GUIControl*)self);
+	return 0;
+};
+static int luags_Slider_SendToBack(lua_State *L) {
+	AGS_Slider* self = luags_checkSlider(L, 1, SLIDER_UV_META);
+	AGS_GUIControl_SendToBack((AGS_GUIControl*)self);
+	return 0;
+};
+static int luags_Slider_SetPosition(lua_State *L) {
+	AGS_Slider* self = luags_checkSlider(L, 1, SLIDER_UV_META);
+	AGS_GUIControl_SetPosition((AGS_GUIControl*)self, (int)luaL_checkint(L,2), (int)luaL_checkint(L,3));
+	return 0;
+};
+static int luags_Slider_SetSize(lua_State *L) {
+	AGS_Slider* self = luags_checkSlider(L, 1, SLIDER_UV_META);
+	AGS_GUIControl_SetSize((AGS_GUIControl*)self, (int)luaL_checkint(L,2), (int)luaL_checkint(L,3));
+	return 0;
+};
+static int luags_Slider_get_Clickable(lua_State *L) {
+	AGS_Slider* self = luags_checkSlider(L, 1, SLIDER_UV_META);
+	lua_pushboolean(L, AGS_GUIControl_get_Clickable((AGS_GUIControl*)self));
+	return 1;
+};
+static int luags_Slider_set_Clickable(lua_State *L) {
+	AGS_Slider* self = luags_checkSlider(L, 1, SLIDER_UV_META);
+	AGS_GUIControl_set_Clickable((AGS_GUIControl*)self, llh_checkboolean(L,2));
+	return 0;
+};
+static int luags_Slider_get_Enabled(lua_State *L) {
+	AGS_Slider* self = luags_checkSlider(L, 1, SLIDER_UV_META);
+	lua_pushboolean(L, AGS_GUIControl_get_Enabled((AGS_GUIControl*)self));
+	return 1;
+};
+static int luags_Slider_set_Enabled(lua_State *L) {
+	AGS_Slider* self = luags_checkSlider(L, 1, SLIDER_UV_META);
+	AGS_GUIControl_set_Enabled((AGS_GUIControl*)self, llh_checkboolean(L,2));
+	return 0;
+};
+static int luags_Slider_get_Height(lua_State *L) {
+	AGS_Slider* self = luags_checkSlider(L, 1, SLIDER_UV_META);
+	lua_pushinteger(L, AGS_GUIControl_get_Height((AGS_GUIControl*)self));
+	return 1;
+};
+static int luags_Slider_set_Height(lua_State *L) {
+	AGS_Slider* self = luags_checkSlider(L, 1, SLIDER_UV_META);
+	AGS_GUIControl_set_Height((AGS_GUIControl*)self, (int)luaL_checkint(L,2));
+	return 0;
+};
+static int luags_Slider_get_ID(lua_State *L) {
+	AGS_Slider* self = luags_checkSlider(L, 1, SLIDER_UV_META);
+	lua_pushinteger(L, AGS_GUIControl_get_ID((AGS_GUIControl*)self));
+	return 1;
+};
+static int luags_Slider_get_OwningGUI(lua_State *L) {
+	AGS_Slider* self = luags_checkSlider(L, 1, SLIDER_UV_META);
+	luags_pushGUI(L, AGS_GUIControl_get_OwningGUI((AGS_GUIControl*)self), SLIDER_UV_GUI_META, SLIDER_UV_GUI_STORE);
+	return 1;
+};
+static int luags_Slider_get_Visible(lua_State *L) {
+	AGS_Slider* self = luags_checkSlider(L, 1, SLIDER_UV_META);
+	lua_pushboolean(L, AGS_GUIControl_get_Visible((AGS_GUIControl*)self));
+	return 1;
+};
+static int luags_Slider_set_Visible(lua_State *L) {
+	AGS_Slider* self = luags_checkSlider(L, 1, SLIDER_UV_META);
+	AGS_GUIControl_set_Visible((AGS_GUIControl*)self, llh_checkboolean(L,2));
+	return 0;
+};
+static int luags_Slider_get_Width(lua_State *L) {
+	AGS_Slider* self = luags_checkSlider(L, 1, SLIDER_UV_META);
+	lua_pushinteger(L, AGS_GUIControl_get_Width((AGS_GUIControl*)self));
+	return 1;
+};
+static int luags_Slider_set_Width(lua_State *L) {
+	AGS_Slider* self = luags_checkSlider(L, 1, SLIDER_UV_META);
+	AGS_GUIControl_set_Width((AGS_GUIControl*)self, (int)luaL_checkint(L,2));
+	return 0;
+};
+static int luags_Slider_get_X(lua_State *L) {
+	AGS_Slider* self = luags_checkSlider(L, 1, SLIDER_UV_META);
+	lua_pushinteger(L, AGS_GUIControl_get_X((AGS_GUIControl*)self));
+	return 1;
+};
+static int luags_Slider_set_X(lua_State *L) {
+	AGS_Slider* self = luags_checkSlider(L, 1, SLIDER_UV_META);
+	AGS_GUIControl_set_X((AGS_GUIControl*)self, (int)luaL_checkint(L,2));
+	return 0;
+};
+static int luags_Slider_get_Y(lua_State *L) {
+	AGS_Slider* self = luags_checkSlider(L, 1, SLIDER_UV_META);
+	lua_pushinteger(L, AGS_GUIControl_get_Y((AGS_GUIControl*)self));
+	return 1;
+};
+static int luags_Slider_set_Y(lua_State *L) {
+	AGS_Slider* self = luags_checkSlider(L, 1, SLIDER_UV_META);
+	AGS_GUIControl_set_Y((AGS_GUIControl*)self, (int)luaL_checkint(L,2));
+	return 0;
+};
+static int luags_Slider_get_BackgroundGraphic(lua_State *L) {
+	AGS_Slider* self = luags_checkSlider(L, 1, SLIDER_UV_META);
+	lua_pushinteger(L, AGS_Slider_get_BackgroundGraphic(self));
+	return 1;
+};
+static int luags_Slider_set_BackgroundGraphic(lua_State *L) {
+	AGS_Slider* self = luags_checkSlider(L, 1, SLIDER_UV_META);
+	AGS_Slider_set_BackgroundGraphic(self, (int)luaL_checkint(L,2));
+	return 0;
+};
+static int luags_Slider_get_HandleGraphic(lua_State *L) {
+	AGS_Slider* self = luags_checkSlider(L, 1, SLIDER_UV_META);
+	lua_pushinteger(L, AGS_Slider_get_HandleGraphic(self));
+	return 1;
+};
+static int luags_Slider_set_HandleGraphic(lua_State *L) {
+	AGS_Slider* self = luags_checkSlider(L, 1, SLIDER_UV_META);
+	AGS_Slider_set_HandleGraphic(self, (int)luaL_checkint(L,2));
+	return 0;
+};
+static int luags_Slider_get_HandleOffset(lua_State *L) {
+	AGS_Slider* self = luags_checkSlider(L, 1, SLIDER_UV_META);
+	lua_pushinteger(L, AGS_Slider_get_HandleOffset(self));
+	return 1;
+};
+static int luags_Slider_set_HandleOffset(lua_State *L) {
+	AGS_Slider* self = luags_checkSlider(L, 1, SLIDER_UV_META);
+	AGS_Slider_set_HandleOffset(self, (int)luaL_checkint(L,2));
+	return 0;
+};
+static int luags_Slider_get_Max(lua_State *L) {
+	AGS_Slider* self = luags_checkSlider(L, 1, SLIDER_UV_META);
+	lua_pushinteger(L, AGS_Slider_get_Max(self));
+	return 1;
+};
+static int luags_Slider_set_Max(lua_State *L) {
+	AGS_Slider* self = luags_checkSlider(L, 1, SLIDER_UV_META);
+	AGS_Slider_set_Max(self, (int)luaL_checkint(L,2));
+	return 0;
+};
+static int luags_Slider_get_Min(lua_State *L) {
+	AGS_Slider* self = luags_checkSlider(L, 1, SLIDER_UV_META);
+	lua_pushinteger(L, AGS_Slider_get_Min(self));
+	return 1;
+};
+static int luags_Slider_set_Min(lua_State *L) {
+	AGS_Slider* self = luags_checkSlider(L, 1, SLIDER_UV_META);
+	AGS_Slider_set_Min(self, (int)luaL_checkint(L,2));
+	return 0;
+};
+static int luags_Slider_get_Value(lua_State *L) {
+	AGS_Slider* self = luags_checkSlider(L, 1, SLIDER_UV_META);
+	lua_pushinteger(L, AGS_Slider_get_Value(self));
+	return 1;
+};
+static int luags_Slider_set_Value(lua_State *L) {
+	AGS_Slider* self = luags_checkSlider(L, 1, SLIDER_UV_META);
+	AGS_Slider_set_Value(self, (int)luaL_checkint(L,2));
+	return 0;
+};
+#undef SLIDER_UV_GUI_META
+#undef SLIDER_UV_GUI_STORE
+#undef SLIDER_UV_META
+#undef SLIDER_UV_STORE
+
+int luaopen_ags_Slider(lua_State *L) {
+	int IDX_LIB, IDX_LIB_META;
+	int IDX_GUI_META;
+	int IDX_GUI_STORE;
+	int IDX_SLIDER_META;
+	int IDX_SLIDER_STORE;
+	luaL_register(L, "ags.Slider", llh_null_lib);
+	IDX_LIB = lua_gettop(L);
+	lua_createtable(L,0,2);
+	IDX_LIB_META = lua_gettop(L);
+	lua_pushvalue(L,IDX_LIB_META);
+	lua_setmetatable(L,IDX_LIB);
+	luaL_newmetatable(L, "AGS_GUI*");
+	IDX_GUI_META = lua_gettop(L);
+	luaL_newmetatable(L, IMMORTAL_OBJECT_STORE);
+	IDX_GUI_STORE = lua_gettop(L);
+	luaL_newmetatable(L, "AGS_Slider*");
+	IDX_SLIDER_META = lua_gettop(L);
+	luaL_newmetatable(L, IMMORTAL_OBJECT_STORE);
+	IDX_SLIDER_STORE = lua_gettop(L);
+	lua_getglobal(L, "agsinternal");
+	lua_getfield(L, -1, "initlib");
+	lua_pushvalue(L, IDX_LIB);
+	lua_pushvalue(L, IDX_LIB_META);
+	lua_pushvalue(L, IDX_SLIDER_META);
+	lua_pushboolean(L, 1);
+	lua_call(L,4,0);
+	lua_pop(L,1); // agsinternal
+	
+	#define ADD_MEMBER(name,f) { \
+		lua_pushliteral(L, #name); \
+		lua_pushvalue(L, IDX_GUI_META); \
+		lua_pushvalue(L, IDX_GUI_STORE); \
+		lua_pushvalue(L, IDX_SLIDER_META); \
+		lua_pushvalue(L, IDX_SLIDER_STORE); \
+		lua_pushcclosure(L, f, 4); \
+		lua_rawset(L, IDX_LIB); \
+	}
+	#define ADD_METHOD(name) { if (AGS_Slider_##name) { ADD_MEMBER(name, luags_Slider_##name); } }
+	#define INHERIT_METHOD(name,from) { if (AGS_##from##_##name) { ADD_MEMBER(name, luags_Slider_##name); } }
+	ADD_METHOD(get_BackgroundGraphic);
+	ADD_METHOD(set_BackgroundGraphic);
+	ADD_METHOD(get_HandleGraphic);
+	ADD_METHOD(set_HandleGraphic);
+	ADD_METHOD(get_HandleOffset);
+	ADD_METHOD(set_HandleOffset);
+	ADD_METHOD(get_Max);
+	ADD_METHOD(set_Max);
+	ADD_METHOD(get_Min);
+	ADD_METHOD(set_Min);
+	ADD_METHOD(get_Value);
+	ADD_METHOD(set_Value);
+	INHERIT_METHOD(BringToFront, GUIControl);
+	INHERIT_METHOD(SendToBack, GUIControl);
+	INHERIT_METHOD(SetPosition, GUIControl);
+	INHERIT_METHOD(SetSize, GUIControl);
+	INHERIT_METHOD(get_Clickable, GUIControl);
+	INHERIT_METHOD(set_Clickable, GUIControl);
+	INHERIT_METHOD(get_Enabled, GUIControl);
+	INHERIT_METHOD(set_Enabled, GUIControl);
+	INHERIT_METHOD(get_Height, GUIControl);
+	INHERIT_METHOD(set_Height, GUIControl);
+	INHERIT_METHOD(get_ID, GUIControl);
+	INHERIT_METHOD(get_OwningGUI, GUIControl);
+	INHERIT_METHOD(get_Visible, GUIControl);
+	INHERIT_METHOD(set_Visible, GUIControl);
+	INHERIT_METHOD(get_Width, GUIControl);
+	INHERIT_METHOD(set_Width, GUIControl);
+	INHERIT_METHOD(get_X, GUIControl);
+	INHERIT_METHOD(set_X, GUIControl);
+	INHERIT_METHOD(get_Y, GUIControl);
+	INHERIT_METHOD(set_Y, GUIControl);
+	#undef ADD_METHOD
+	#undef INHERIT_METHOD
+	#undef ADD_MEMBER
+	
+	lua_settop(L,IDX_LIB);
+	return 1;
+};
+
+// TextBox Lua wrappers
+#define TEXTBOX_UV_META lua_upvalueindex(1)
+#define TEXTBOX_UV_STORE lua_upvalueindex(2)
+#define TEXTBOX_UV_GUI_META lua_upvalueindex(3)
+#define TEXTBOX_UV_GUI_STORE lua_upvalueindex(4)
+static int luags_TextBox_BringToFront(lua_State *L) {
+	AGS_TextBox* self = luags_checkTextBox(L, 1, TEXTBOX_UV_META);
+	AGS_GUIControl_BringToFront((AGS_GUIControl*)self);
+	return 0;
+};
+static int luags_TextBox_SendToBack(lua_State *L) {
+	AGS_TextBox* self = luags_checkTextBox(L, 1, TEXTBOX_UV_META);
+	AGS_GUIControl_SendToBack((AGS_GUIControl*)self);
+	return 0;
+};
+static int luags_TextBox_SetPosition(lua_State *L) {
+	AGS_TextBox* self = luags_checkTextBox(L, 1, TEXTBOX_UV_META);
+	AGS_GUIControl_SetPosition((AGS_GUIControl*)self, (int)luaL_checkint(L,2), (int)luaL_checkint(L,3));
+	return 0;
+};
+static int luags_TextBox_SetSize(lua_State *L) {
+	AGS_TextBox* self = luags_checkTextBox(L, 1, TEXTBOX_UV_META);
+	AGS_GUIControl_SetSize((AGS_GUIControl*)self, (int)luaL_checkint(L,2), (int)luaL_checkint(L,3));
+	return 0;
+};
+static int luags_TextBox_get_Clickable(lua_State *L) {
+	AGS_TextBox* self = luags_checkTextBox(L, 1, TEXTBOX_UV_META);
+	lua_pushboolean(L, AGS_GUIControl_get_Clickable((AGS_GUIControl*)self));
+	return 1;
+};
+static int luags_TextBox_set_Clickable(lua_State *L) {
+	AGS_TextBox* self = luags_checkTextBox(L, 1, TEXTBOX_UV_META);
+	AGS_GUIControl_set_Clickable((AGS_GUIControl*)self, llh_checkboolean(L,2));
+	return 0;
+};
+static int luags_TextBox_get_Enabled(lua_State *L) {
+	AGS_TextBox* self = luags_checkTextBox(L, 1, TEXTBOX_UV_META);
+	lua_pushboolean(L, AGS_GUIControl_get_Enabled((AGS_GUIControl*)self));
+	return 1;
+};
+static int luags_TextBox_set_Enabled(lua_State *L) {
+	AGS_TextBox* self = luags_checkTextBox(L, 1, TEXTBOX_UV_META);
+	AGS_GUIControl_set_Enabled((AGS_GUIControl*)self, llh_checkboolean(L,2));
+	return 0;
+};
+static int luags_TextBox_get_Height(lua_State *L) {
+	AGS_TextBox* self = luags_checkTextBox(L, 1, TEXTBOX_UV_META);
+	lua_pushinteger(L, AGS_GUIControl_get_Height((AGS_GUIControl*)self));
+	return 1;
+};
+static int luags_TextBox_set_Height(lua_State *L) {
+	AGS_TextBox* self = luags_checkTextBox(L, 1, TEXTBOX_UV_META);
+	AGS_GUIControl_set_Height((AGS_GUIControl*)self, (int)luaL_checkint(L,2));
+	return 0;
+};
+static int luags_TextBox_get_ID(lua_State *L) {
+	AGS_TextBox* self = luags_checkTextBox(L, 1, TEXTBOX_UV_META);
+	lua_pushinteger(L, AGS_GUIControl_get_ID((AGS_GUIControl*)self));
+	return 1;
+};
+static int luags_TextBox_get_OwningGUI(lua_State *L) {
+	AGS_TextBox* self = luags_checkTextBox(L, 1, TEXTBOX_UV_META);
+	luags_pushGUI(L, AGS_GUIControl_get_OwningGUI((AGS_GUIControl*)self), TEXTBOX_UV_GUI_META, TEXTBOX_UV_GUI_STORE);
+	return 1;
+};
+static int luags_TextBox_get_Visible(lua_State *L) {
+	AGS_TextBox* self = luags_checkTextBox(L, 1, TEXTBOX_UV_META);
+	lua_pushboolean(L, AGS_GUIControl_get_Visible((AGS_GUIControl*)self));
+	return 1;
+};
+static int luags_TextBox_set_Visible(lua_State *L) {
+	AGS_TextBox* self = luags_checkTextBox(L, 1, TEXTBOX_UV_META);
+	AGS_GUIControl_set_Visible((AGS_GUIControl*)self, llh_checkboolean(L,2));
+	return 0;
+};
+static int luags_TextBox_get_Width(lua_State *L) {
+	AGS_TextBox* self = luags_checkTextBox(L, 1, TEXTBOX_UV_META);
+	lua_pushinteger(L, AGS_GUIControl_get_Width((AGS_GUIControl*)self));
+	return 1;
+};
+static int luags_TextBox_set_Width(lua_State *L) {
+	AGS_TextBox* self = luags_checkTextBox(L, 1, TEXTBOX_UV_META);
+	AGS_GUIControl_set_Width((AGS_GUIControl*)self, (int)luaL_checkint(L,2));
+	return 0;
+};
+static int luags_TextBox_get_X(lua_State *L) {
+	AGS_TextBox* self = luags_checkTextBox(L, 1, TEXTBOX_UV_META);
+	lua_pushinteger(L, AGS_GUIControl_get_X((AGS_GUIControl*)self));
+	return 1;
+};
+static int luags_TextBox_set_X(lua_State *L) {
+	AGS_TextBox* self = luags_checkTextBox(L, 1, TEXTBOX_UV_META);
+	AGS_GUIControl_set_X((AGS_GUIControl*)self, (int)luaL_checkint(L,2));
+	return 0;
+};
+static int luags_TextBox_get_Y(lua_State *L) {
+	AGS_TextBox* self = luags_checkTextBox(L, 1, TEXTBOX_UV_META);
+	lua_pushinteger(L, AGS_GUIControl_get_Y((AGS_GUIControl*)self));
+	return 1;
+};
+static int luags_TextBox_set_Y(lua_State *L) {
+	AGS_TextBox* self = luags_checkTextBox(L, 1, TEXTBOX_UV_META);
+	AGS_GUIControl_set_Y((AGS_GUIControl*)self, (int)luaL_checkint(L,2));
+	return 0;
+};
+static int luags_TextBox_get_Font(lua_State *L) {
+	AGS_TextBox* self = luags_checkTextBox(L, 1, TEXTBOX_UV_META);
+	luags_pushFontType(L, AGS_TextBox_get_Font(self));
+	return 1;
+};
+static int luags_TextBox_set_Font(lua_State *L) {
+	AGS_TextBox* self = luags_checkTextBox(L, 1, TEXTBOX_UV_META);
+	AGS_TextBox_set_Font(self, luags_checkFontType(L,2));
+	return 0;
+};
+static int luags_TextBox_get_Text(lua_State *L) {
+	AGS_TextBox* self = luags_checkTextBox(L, 1, TEXTBOX_UV_META);
+	lua_pushstring(L, AGS_TextBox_get_Text(self));
+	return 1;
+};
+static int luags_TextBox_set_Text(lua_State *L) {
+	AGS_TextBox* self = luags_checkTextBox(L, 1, TEXTBOX_UV_META);
+	AGS_TextBox_set_Text(self, luaL_checkstring(L,2));
+	return 0;
+};
+static int luags_TextBox_get_TextColor(lua_State *L) {
+	AGS_TextBox* self = luags_checkTextBox(L, 1, TEXTBOX_UV_META);
+	lua_pushinteger(L, AGS_TextBox_get_TextColor(self));
+	return 1;
+};
+static int luags_TextBox_set_TextColor(lua_State *L) {
+	AGS_TextBox* self = luags_checkTextBox(L, 1, TEXTBOX_UV_META);
+	AGS_TextBox_set_TextColor(self, (int)luaL_checkint(L,2));
+	return 0;
+};
+#undef TEXTBOX_UV_META
+#undef TEXTBOX_UV_STORE
+#undef TEXTBOX_UV_GUI_META
+#undef TEXTBOX_UV_GUI_STORE
+
+int luaopen_ags_TextBox(lua_State *L) {
+	int IDX_LIB, IDX_LIB_META;
+	int IDX_TEXTBOX_META;
+	int IDX_TEXTBOX_STORE;
+	int IDX_GUI_META;
+	int IDX_GUI_STORE;
+	luaL_register(L, "ags.TextBox", llh_null_lib);
+	IDX_LIB = lua_gettop(L);
+	lua_createtable(L,0,2);
+	IDX_LIB_META = lua_gettop(L);
+	lua_pushvalue(L,IDX_LIB_META);
+	lua_setmetatable(L,IDX_LIB);
+	luaL_newmetatable(L, "AGS_TextBox*");
+	IDX_TEXTBOX_META = lua_gettop(L);
+	luaL_newmetatable(L, IMMORTAL_OBJECT_STORE);
+	IDX_TEXTBOX_STORE = lua_gettop(L);
+	luaL_newmetatable(L, "AGS_GUI*");
+	IDX_GUI_META = lua_gettop(L);
+	luaL_newmetatable(L, IMMORTAL_OBJECT_STORE);
+	IDX_GUI_STORE = lua_gettop(L);
+	lua_getglobal(L, "agsinternal");
+	lua_getfield(L, -1, "initlib");
+	lua_pushvalue(L, IDX_LIB);
+	lua_pushvalue(L, IDX_LIB_META);
+	lua_pushvalue(L, IDX_TEXTBOX_META);
+	lua_pushboolean(L, 1);
+	lua_call(L,4,0);
+	lua_pop(L,1); // agsinternal
+	
+	#define ADD_MEMBER(name,f) { \
+		lua_pushliteral(L, #name); \
+		lua_pushvalue(L, IDX_TEXTBOX_META); \
+		lua_pushvalue(L, IDX_TEXTBOX_STORE); \
+		lua_pushvalue(L, IDX_GUI_META); \
+		lua_pushvalue(L, IDX_GUI_STORE); \
+		lua_pushcclosure(L, f, 4); \
+		lua_rawset(L, IDX_LIB); \
+	}
+	#define ADD_METHOD(name) { if (AGS_TextBox_##name) { ADD_MEMBER(name, luags_TextBox_##name); } }
+	#define INHERIT_METHOD(name,from) { if (AGS_##from##_##name) { ADD_MEMBER(name, luags_TextBox_##name); } }
+	ADD_METHOD(get_Font);
+	ADD_METHOD(set_Font);
+	ADD_METHOD(get_Text);
+	ADD_METHOD(set_Text);
+	ADD_METHOD(get_TextColor);
+	ADD_METHOD(set_TextColor);
+	INHERIT_METHOD(BringToFront, GUIControl);
+	INHERIT_METHOD(SendToBack, GUIControl);
+	INHERIT_METHOD(SetPosition, GUIControl);
+	INHERIT_METHOD(SetSize, GUIControl);
+	INHERIT_METHOD(get_Clickable, GUIControl);
+	INHERIT_METHOD(set_Clickable, GUIControl);
+	INHERIT_METHOD(get_Enabled, GUIControl);
+	INHERIT_METHOD(set_Enabled, GUIControl);
+	INHERIT_METHOD(get_Height, GUIControl);
+	INHERIT_METHOD(set_Height, GUIControl);
+	INHERIT_METHOD(get_ID, GUIControl);
+	INHERIT_METHOD(get_OwningGUI, GUIControl);
+	INHERIT_METHOD(get_Visible, GUIControl);
+	INHERIT_METHOD(set_Visible, GUIControl);
+	INHERIT_METHOD(get_Width, GUIControl);
+	INHERIT_METHOD(set_Width, GUIControl);
+	INHERIT_METHOD(get_X, GUIControl);
+	INHERIT_METHOD(set_X, GUIControl);
+	INHERIT_METHOD(get_Y, GUIControl);
+	INHERIT_METHOD(set_Y, GUIControl);
+	#undef ADD_METHOD
+	#undef INHERIT_METHOD
+	#undef ADD_MEMBER
+	
+	lua_settop(L,IDX_LIB);
+	return 1;
+};
+
+// InvWindow Lua wrappers
+#define INVWINDOW_UV_GUI_META lua_upvalueindex(1)
+#define INVWINDOW_UV_GUI_STORE lua_upvalueindex(2)
+#define INVWINDOW_UV_CHARACTER_META lua_upvalueindex(3)
+#define INVWINDOW_UV_CHARACTER_STORE lua_upvalueindex(4)
+#define INVWINDOW_UV_META lua_upvalueindex(5)
+#define INVWINDOW_UV_STORE lua_upvalueindex(6)
+#define INVWINDOW_UV_INVENTORYITEM_META lua_upvalueindex(7)
+#define INVWINDOW_UV_INVENTORYITEM_STORE lua_upvalueindex(8)
+static int luags_InvWindow_BringToFront(lua_State *L) {
+	AGS_InvWindow* self = luags_checkInvWindow(L, 1, INVWINDOW_UV_META);
+	AGS_GUIControl_BringToFront((AGS_GUIControl*)self);
+	return 0;
+};
+static int luags_InvWindow_SendToBack(lua_State *L) {
+	AGS_InvWindow* self = luags_checkInvWindow(L, 1, INVWINDOW_UV_META);
+	AGS_GUIControl_SendToBack((AGS_GUIControl*)self);
+	return 0;
+};
+static int luags_InvWindow_SetPosition(lua_State *L) {
+	AGS_InvWindow* self = luags_checkInvWindow(L, 1, INVWINDOW_UV_META);
+	AGS_GUIControl_SetPosition((AGS_GUIControl*)self, (int)luaL_checkint(L,2), (int)luaL_checkint(L,3));
+	return 0;
+};
+static int luags_InvWindow_SetSize(lua_State *L) {
+	AGS_InvWindow* self = luags_checkInvWindow(L, 1, INVWINDOW_UV_META);
+	AGS_GUIControl_SetSize((AGS_GUIControl*)self, (int)luaL_checkint(L,2), (int)luaL_checkint(L,3));
+	return 0;
+};
+static int luags_InvWindow_get_Clickable(lua_State *L) {
+	AGS_InvWindow* self = luags_checkInvWindow(L, 1, INVWINDOW_UV_META);
+	lua_pushboolean(L, AGS_GUIControl_get_Clickable((AGS_GUIControl*)self));
+	return 1;
+};
+static int luags_InvWindow_set_Clickable(lua_State *L) {
+	AGS_InvWindow* self = luags_checkInvWindow(L, 1, INVWINDOW_UV_META);
+	AGS_GUIControl_set_Clickable((AGS_GUIControl*)self, llh_checkboolean(L,2));
+	return 0;
+};
+static int luags_InvWindow_get_Enabled(lua_State *L) {
+	AGS_InvWindow* self = luags_checkInvWindow(L, 1, INVWINDOW_UV_META);
+	lua_pushboolean(L, AGS_GUIControl_get_Enabled((AGS_GUIControl*)self));
+	return 1;
+};
+static int luags_InvWindow_set_Enabled(lua_State *L) {
+	AGS_InvWindow* self = luags_checkInvWindow(L, 1, INVWINDOW_UV_META);
+	AGS_GUIControl_set_Enabled((AGS_GUIControl*)self, llh_checkboolean(L,2));
+	return 0;
+};
+static int luags_InvWindow_get_Height(lua_State *L) {
+	AGS_InvWindow* self = luags_checkInvWindow(L, 1, INVWINDOW_UV_META);
+	lua_pushinteger(L, AGS_GUIControl_get_Height((AGS_GUIControl*)self));
+	return 1;
+};
+static int luags_InvWindow_set_Height(lua_State *L) {
+	AGS_InvWindow* self = luags_checkInvWindow(L, 1, INVWINDOW_UV_META);
+	AGS_GUIControl_set_Height((AGS_GUIControl*)self, (int)luaL_checkint(L,2));
+	return 0;
+};
+static int luags_InvWindow_get_ID(lua_State *L) {
+	AGS_InvWindow* self = luags_checkInvWindow(L, 1, INVWINDOW_UV_META);
+	lua_pushinteger(L, AGS_GUIControl_get_ID((AGS_GUIControl*)self));
+	return 1;
+};
+static int luags_InvWindow_get_OwningGUI(lua_State *L) {
+	AGS_InvWindow* self = luags_checkInvWindow(L, 1, INVWINDOW_UV_META);
+	luags_pushGUI(L, AGS_GUIControl_get_OwningGUI((AGS_GUIControl*)self), INVWINDOW_UV_GUI_META, INVWINDOW_UV_GUI_STORE);
+	return 1;
+};
+static int luags_InvWindow_get_Visible(lua_State *L) {
+	AGS_InvWindow* self = luags_checkInvWindow(L, 1, INVWINDOW_UV_META);
+	lua_pushboolean(L, AGS_GUIControl_get_Visible((AGS_GUIControl*)self));
+	return 1;
+};
+static int luags_InvWindow_set_Visible(lua_State *L) {
+	AGS_InvWindow* self = luags_checkInvWindow(L, 1, INVWINDOW_UV_META);
+	AGS_GUIControl_set_Visible((AGS_GUIControl*)self, llh_checkboolean(L,2));
+	return 0;
+};
+static int luags_InvWindow_get_Width(lua_State *L) {
+	AGS_InvWindow* self = luags_checkInvWindow(L, 1, INVWINDOW_UV_META);
+	lua_pushinteger(L, AGS_GUIControl_get_Width((AGS_GUIControl*)self));
+	return 1;
+};
+static int luags_InvWindow_set_Width(lua_State *L) {
+	AGS_InvWindow* self = luags_checkInvWindow(L, 1, INVWINDOW_UV_META);
+	AGS_GUIControl_set_Width((AGS_GUIControl*)self, (int)luaL_checkint(L,2));
+	return 0;
+};
+static int luags_InvWindow_get_X(lua_State *L) {
+	AGS_InvWindow* self = luags_checkInvWindow(L, 1, INVWINDOW_UV_META);
+	lua_pushinteger(L, AGS_GUIControl_get_X((AGS_GUIControl*)self));
+	return 1;
+};
+static int luags_InvWindow_set_X(lua_State *L) {
+	AGS_InvWindow* self = luags_checkInvWindow(L, 1, INVWINDOW_UV_META);
+	AGS_GUIControl_set_X((AGS_GUIControl*)self, (int)luaL_checkint(L,2));
+	return 0;
+};
+static int luags_InvWindow_get_Y(lua_State *L) {
+	AGS_InvWindow* self = luags_checkInvWindow(L, 1, INVWINDOW_UV_META);
+	lua_pushinteger(L, AGS_GUIControl_get_Y((AGS_GUIControl*)self));
+	return 1;
+};
+static int luags_InvWindow_set_Y(lua_State *L) {
+	AGS_InvWindow* self = luags_checkInvWindow(L, 1, INVWINDOW_UV_META);
+	AGS_GUIControl_set_Y((AGS_GUIControl*)self, (int)luaL_checkint(L,2));
+	return 0;
+};
+static int luags_InvWindow_ScrollDown(lua_State *L) {
+	AGS_InvWindow* self = luags_checkInvWindow(L, 1, INVWINDOW_UV_META);
+	AGS_InvWindow_ScrollDown(self);
+	return 0;
+};
+static int luags_InvWindow_ScrollUp(lua_State *L) {
+	AGS_InvWindow* self = luags_checkInvWindow(L, 1, INVWINDOW_UV_META);
+	AGS_InvWindow_ScrollUp(self);
+	return 0;
+};
+static int luags_InvWindow_get_CharacterToUse(lua_State *L) {
+	AGS_InvWindow* self = luags_checkInvWindow(L, 1, INVWINDOW_UV_META);
+	luags_pushCharacter(L, AGS_InvWindow_get_CharacterToUse(self), INVWINDOW_UV_CHARACTER_META, INVWINDOW_UV_CHARACTER_STORE);
+	return 1;
+};
+static int luags_InvWindow_set_CharacterToUse(lua_State *L) {
+	AGS_InvWindow* self = luags_checkInvWindow(L, 1, INVWINDOW_UV_META);
+	AGS_InvWindow_set_CharacterToUse(self, luags_checkCharacter(L,2, INVWINDOW_UV_CHARACTER_META));
+	return 0;
+};
+static int luags_InvWindow_geti_ItemAtIndex(lua_State *L) {
+	AGS_InvWindow* self = luags_checkInvWindow(L, 1, INVWINDOW_UV_META);
+	luags_pushInventoryItem(L, AGS_InvWindow_geti_ItemAtIndex(self, (int)luaL_checkint(L,2)), INVWINDOW_UV_INVENTORYITEM_META, INVWINDOW_UV_INVENTORYITEM_STORE);
+	return 1;
+};
+static int luags_InvWindow_get_ItemCount(lua_State *L) {
+	AGS_InvWindow* self = luags_checkInvWindow(L, 1, INVWINDOW_UV_META);
+	lua_pushinteger(L, AGS_InvWindow_get_ItemCount(self));
+	return 1;
+};
+static int luags_InvWindow_get_ItemHeight(lua_State *L) {
+	AGS_InvWindow* self = luags_checkInvWindow(L, 1, INVWINDOW_UV_META);
+	lua_pushinteger(L, AGS_InvWindow_get_ItemHeight(self));
+	return 1;
+};
+static int luags_InvWindow_set_ItemHeight(lua_State *L) {
+	AGS_InvWindow* self = luags_checkInvWindow(L, 1, INVWINDOW_UV_META);
+	AGS_InvWindow_set_ItemHeight(self, (int)luaL_checkint(L,2));
+	return 0;
+};
+static int luags_InvWindow_get_ItemWidth(lua_State *L) {
+	AGS_InvWindow* self = luags_checkInvWindow(L, 1, INVWINDOW_UV_META);
+	lua_pushinteger(L, AGS_InvWindow_get_ItemWidth(self));
+	return 1;
+};
+static int luags_InvWindow_set_ItemWidth(lua_State *L) {
+	AGS_InvWindow* self = luags_checkInvWindow(L, 1, INVWINDOW_UV_META);
+	AGS_InvWindow_set_ItemWidth(self, (int)luaL_checkint(L,2));
+	return 0;
+};
+static int luags_InvWindow_get_TopItem(lua_State *L) {
+	AGS_InvWindow* self = luags_checkInvWindow(L, 1, INVWINDOW_UV_META);
+	lua_pushinteger(L, AGS_InvWindow_get_TopItem(self));
+	return 1;
+};
+static int luags_InvWindow_set_TopItem(lua_State *L) {
+	AGS_InvWindow* self = luags_checkInvWindow(L, 1, INVWINDOW_UV_META);
+	AGS_InvWindow_set_TopItem(self, (int)luaL_checkint(L,2));
+	return 0;
+};
+static int luags_InvWindow_get_ItemsPerRow(lua_State *L) {
+	AGS_InvWindow* self = luags_checkInvWindow(L, 1, INVWINDOW_UV_META);
+	lua_pushinteger(L, AGS_InvWindow_get_ItemsPerRow(self));
+	return 1;
+};
+static int luags_InvWindow_get_RowCount(lua_State *L) {
+	AGS_InvWindow* self = luags_checkInvWindow(L, 1, INVWINDOW_UV_META);
+	lua_pushinteger(L, AGS_InvWindow_get_RowCount(self));
+	return 1;
+};
+#undef INVWINDOW_UV_GUI_META
+#undef INVWINDOW_UV_GUI_STORE
+#undef INVWINDOW_UV_CHARACTER_META
+#undef INVWINDOW_UV_CHARACTER_STORE
+#undef INVWINDOW_UV_META
+#undef INVWINDOW_UV_STORE
+#undef INVWINDOW_UV_INVENTORYITEM_META
+#undef INVWINDOW_UV_INVENTORYITEM_STORE
+
+int luaopen_ags_InvWindow(lua_State *L) {
+	int IDX_LIB, IDX_LIB_META;
+	int IDX_GUI_META;
+	int IDX_GUI_STORE;
+	int IDX_CHARACTER_META;
+	int IDX_CHARACTER_STORE;
+	int IDX_INVWINDOW_META;
+	int IDX_INVWINDOW_STORE;
+	int IDX_INVENTORYITEM_META;
+	int IDX_INVENTORYITEM_STORE;
+	luaL_register(L, "ags.InvWindow", llh_null_lib);
+	IDX_LIB = lua_gettop(L);
+	lua_createtable(L,0,2);
+	IDX_LIB_META = lua_gettop(L);
+	lua_pushvalue(L,IDX_LIB_META);
+	lua_setmetatable(L,IDX_LIB);
+	luaL_newmetatable(L, "AGS_GUI*");
+	IDX_GUI_META = lua_gettop(L);
+	luaL_newmetatable(L, IMMORTAL_OBJECT_STORE);
+	IDX_GUI_STORE = lua_gettop(L);
+	luaL_newmetatable(L, "AGS_Character*");
+	IDX_CHARACTER_META = lua_gettop(L);
+	luaL_newmetatable(L, IMMORTAL_OBJECT_STORE);
+	IDX_CHARACTER_STORE = lua_gettop(L);
+	luaL_newmetatable(L, "AGS_InvWindow*");
+	IDX_INVWINDOW_META = lua_gettop(L);
+	luaL_newmetatable(L, IMMORTAL_OBJECT_STORE);
+	IDX_INVWINDOW_STORE = lua_gettop(L);
+	luaL_newmetatable(L, "AGS_InventoryItem*");
+	IDX_INVENTORYITEM_META = lua_gettop(L);
+	luaL_newmetatable(L, IMMORTAL_OBJECT_STORE);
+	IDX_INVENTORYITEM_STORE = lua_gettop(L);
+	lua_getglobal(L, "agsinternal");
+	lua_getfield(L, -1, "initlib");
+	lua_pushvalue(L, IDX_LIB);
+	lua_pushvalue(L, IDX_LIB_META);
+	lua_pushvalue(L, IDX_INVWINDOW_META);
+	lua_pushboolean(L, 1);
+	lua_call(L,4,0);
+	lua_pop(L,1); // agsinternal
+	
+	#define ADD_MEMBER(name,f) { \
+		lua_pushliteral(L, #name); \
+		lua_pushvalue(L, IDX_GUI_META); \
+		lua_pushvalue(L, IDX_GUI_STORE); \
+		lua_pushvalue(L, IDX_CHARACTER_META); \
+		lua_pushvalue(L, IDX_CHARACTER_STORE); \
+		lua_pushvalue(L, IDX_INVWINDOW_META); \
+		lua_pushvalue(L, IDX_INVWINDOW_STORE); \
+		lua_pushvalue(L, IDX_INVENTORYITEM_META); \
+		lua_pushvalue(L, IDX_INVENTORYITEM_STORE); \
+		lua_pushcclosure(L, f, 8); \
+		lua_rawset(L, IDX_LIB); \
+	}
+	#define ADD_METHOD(name) { if (AGS_InvWindow_##name) { ADD_MEMBER(name, luags_InvWindow_##name); } }
+	#define INHERIT_METHOD(name,from) { if (AGS_##from##_##name) { ADD_MEMBER(name, luags_InvWindow_##name); } }
+	ADD_METHOD(ScrollDown);
+	ADD_METHOD(ScrollUp);
+	ADD_METHOD(get_CharacterToUse);
+	ADD_METHOD(set_CharacterToUse);
+	ADD_METHOD(geti_ItemAtIndex);
+	ADD_METHOD(get_ItemCount);
+	ADD_METHOD(get_ItemHeight);
+	ADD_METHOD(set_ItemHeight);
+	ADD_METHOD(get_ItemWidth);
+	ADD_METHOD(set_ItemWidth);
+	ADD_METHOD(get_TopItem);
+	ADD_METHOD(set_TopItem);
+	ADD_METHOD(get_ItemsPerRow);
+	ADD_METHOD(get_RowCount);
+	INHERIT_METHOD(BringToFront, GUIControl);
+	INHERIT_METHOD(SendToBack, GUIControl);
+	INHERIT_METHOD(SetPosition, GUIControl);
+	INHERIT_METHOD(SetSize, GUIControl);
+	INHERIT_METHOD(get_Clickable, GUIControl);
+	INHERIT_METHOD(set_Clickable, GUIControl);
+	INHERIT_METHOD(get_Enabled, GUIControl);
+	INHERIT_METHOD(set_Enabled, GUIControl);
+	INHERIT_METHOD(get_Height, GUIControl);
+	INHERIT_METHOD(set_Height, GUIControl);
+	INHERIT_METHOD(get_ID, GUIControl);
+	INHERIT_METHOD(get_OwningGUI, GUIControl);
+	INHERIT_METHOD(get_Visible, GUIControl);
+	INHERIT_METHOD(set_Visible, GUIControl);
+	INHERIT_METHOD(get_Width, GUIControl);
+	INHERIT_METHOD(set_Width, GUIControl);
+	INHERIT_METHOD(get_X, GUIControl);
+	INHERIT_METHOD(set_X, GUIControl);
+	INHERIT_METHOD(get_Y, GUIControl);
+	INHERIT_METHOD(set_Y, GUIControl);
+	#undef ADD_METHOD
+	#undef INHERIT_METHOD
+	#undef ADD_MEMBER
+	
+	lua_settop(L,IDX_LIB);
+	return 1;
+};
+
+// ListBox Lua wrappers
+#define LISTBOX_UV_META lua_upvalueindex(1)
+#define LISTBOX_UV_STORE lua_upvalueindex(2)
+#define LISTBOX_UV_GUI_META lua_upvalueindex(3)
+#define LISTBOX_UV_GUI_STORE lua_upvalueindex(4)
+static int luags_ListBox_BringToFront(lua_State *L) {
+	AGS_ListBox* self = luags_checkListBox(L, 1, LISTBOX_UV_META);
+	AGS_GUIControl_BringToFront((AGS_GUIControl*)self);
+	return 0;
+};
+static int luags_ListBox_SendToBack(lua_State *L) {
+	AGS_ListBox* self = luags_checkListBox(L, 1, LISTBOX_UV_META);
+	AGS_GUIControl_SendToBack((AGS_GUIControl*)self);
+	return 0;
+};
+static int luags_ListBox_SetPosition(lua_State *L) {
+	AGS_ListBox* self = luags_checkListBox(L, 1, LISTBOX_UV_META);
+	AGS_GUIControl_SetPosition((AGS_GUIControl*)self, (int)luaL_checkint(L,2), (int)luaL_checkint(L,3));
+	return 0;
+};
+static int luags_ListBox_SetSize(lua_State *L) {
+	AGS_ListBox* self = luags_checkListBox(L, 1, LISTBOX_UV_META);
+	AGS_GUIControl_SetSize((AGS_GUIControl*)self, (int)luaL_checkint(L,2), (int)luaL_checkint(L,3));
+	return 0;
+};
+static int luags_ListBox_get_Clickable(lua_State *L) {
+	AGS_ListBox* self = luags_checkListBox(L, 1, LISTBOX_UV_META);
+	lua_pushboolean(L, AGS_GUIControl_get_Clickable((AGS_GUIControl*)self));
+	return 1;
+};
+static int luags_ListBox_set_Clickable(lua_State *L) {
+	AGS_ListBox* self = luags_checkListBox(L, 1, LISTBOX_UV_META);
+	AGS_GUIControl_set_Clickable((AGS_GUIControl*)self, llh_checkboolean(L,2));
+	return 0;
+};
+static int luags_ListBox_get_Enabled(lua_State *L) {
+	AGS_ListBox* self = luags_checkListBox(L, 1, LISTBOX_UV_META);
+	lua_pushboolean(L, AGS_GUIControl_get_Enabled((AGS_GUIControl*)self));
+	return 1;
+};
+static int luags_ListBox_set_Enabled(lua_State *L) {
+	AGS_ListBox* self = luags_checkListBox(L, 1, LISTBOX_UV_META);
+	AGS_GUIControl_set_Enabled((AGS_GUIControl*)self, llh_checkboolean(L,2));
+	return 0;
+};
+static int luags_ListBox_get_Height(lua_State *L) {
+	AGS_ListBox* self = luags_checkListBox(L, 1, LISTBOX_UV_META);
+	lua_pushinteger(L, AGS_GUIControl_get_Height((AGS_GUIControl*)self));
+	return 1;
+};
+static int luags_ListBox_set_Height(lua_State *L) {
+	AGS_ListBox* self = luags_checkListBox(L, 1, LISTBOX_UV_META);
+	AGS_GUIControl_set_Height((AGS_GUIControl*)self, (int)luaL_checkint(L,2));
+	return 0;
+};
+static int luags_ListBox_get_ID(lua_State *L) {
+	AGS_ListBox* self = luags_checkListBox(L, 1, LISTBOX_UV_META);
+	lua_pushinteger(L, AGS_GUIControl_get_ID((AGS_GUIControl*)self));
+	return 1;
+};
+static int luags_ListBox_get_OwningGUI(lua_State *L) {
+	AGS_ListBox* self = luags_checkListBox(L, 1, LISTBOX_UV_META);
+	luags_pushGUI(L, AGS_GUIControl_get_OwningGUI((AGS_GUIControl*)self), LISTBOX_UV_GUI_META, LISTBOX_UV_GUI_STORE);
+	return 1;
+};
+static int luags_ListBox_get_Visible(lua_State *L) {
+	AGS_ListBox* self = luags_checkListBox(L, 1, LISTBOX_UV_META);
+	lua_pushboolean(L, AGS_GUIControl_get_Visible((AGS_GUIControl*)self));
+	return 1;
+};
+static int luags_ListBox_set_Visible(lua_State *L) {
+	AGS_ListBox* self = luags_checkListBox(L, 1, LISTBOX_UV_META);
+	AGS_GUIControl_set_Visible((AGS_GUIControl*)self, llh_checkboolean(L,2));
+	return 0;
+};
+static int luags_ListBox_get_Width(lua_State *L) {
+	AGS_ListBox* self = luags_checkListBox(L, 1, LISTBOX_UV_META);
+	lua_pushinteger(L, AGS_GUIControl_get_Width((AGS_GUIControl*)self));
+	return 1;
+};
+static int luags_ListBox_set_Width(lua_State *L) {
+	AGS_ListBox* self = luags_checkListBox(L, 1, LISTBOX_UV_META);
+	AGS_GUIControl_set_Width((AGS_GUIControl*)self, (int)luaL_checkint(L,2));
+	return 0;
+};
+static int luags_ListBox_get_X(lua_State *L) {
+	AGS_ListBox* self = luags_checkListBox(L, 1, LISTBOX_UV_META);
+	lua_pushinteger(L, AGS_GUIControl_get_X((AGS_GUIControl*)self));
+	return 1;
+};
+static int luags_ListBox_set_X(lua_State *L) {
+	AGS_ListBox* self = luags_checkListBox(L, 1, LISTBOX_UV_META);
+	AGS_GUIControl_set_X((AGS_GUIControl*)self, (int)luaL_checkint(L,2));
+	return 0;
+};
+static int luags_ListBox_get_Y(lua_State *L) {
+	AGS_ListBox* self = luags_checkListBox(L, 1, LISTBOX_UV_META);
+	lua_pushinteger(L, AGS_GUIControl_get_Y((AGS_GUIControl*)self));
+	return 1;
+};
+static int luags_ListBox_set_Y(lua_State *L) {
+	AGS_ListBox* self = luags_checkListBox(L, 1, LISTBOX_UV_META);
+	AGS_GUIControl_set_Y((AGS_GUIControl*)self, (int)luaL_checkint(L,2));
+	return 0;
+};
+static int luags_ListBox_AddItem(lua_State *L) {
+	AGS_ListBox* self = luags_checkListBox(L, 1, LISTBOX_UV_META);
+	lua_pushboolean(L, AGS_ListBox_AddItem(self, luaL_checkstring(L,2)));
+	return 1;
+};
+static int luags_ListBox_Clear(lua_State *L) {
+	AGS_ListBox* self = luags_checkListBox(L, 1, LISTBOX_UV_META);
+	AGS_ListBox_Clear(self);
+	return 0;
+};
+static int luags_ListBox_FillDirList(lua_State *L) {
+	AGS_ListBox* self = luags_checkListBox(L, 1, LISTBOX_UV_META);
+	AGS_ListBox_FillDirList(self, luaL_checkstring(L,2));
+	return 0;
+};
+static int luags_ListBox_FillSaveGameList(lua_State *L) {
+	AGS_ListBox* self = luags_checkListBox(L, 1, LISTBOX_UV_META);
+	lua_pushinteger(L, AGS_ListBox_FillSaveGameList(self));
+	return 1;
+};
+static int luags_ListBox_GetItemAtLocation(lua_State *L) {
+	AGS_ListBox* self = luags_checkListBox(L, 1, LISTBOX_UV_META);
+	lua_pushinteger(L, AGS_ListBox_GetItemAtLocation(self, (int)luaL_checkint(L,2), (int)luaL_checkint(L,3)));
+	return 1;
+};
+static int luags_ListBox_InsertItemAt(lua_State *L) {
+	AGS_ListBox* self = luags_checkListBox(L, 1, LISTBOX_UV_META);
+	lua_pushboolean(L, AGS_ListBox_InsertItemAt(self, (int)luaL_checkint(L,2), luaL_checkstring(L,3)));
+	return 1;
+};
+static int luags_ListBox_RemoveItem(lua_State *L) {
+	AGS_ListBox* self = luags_checkListBox(L, 1, LISTBOX_UV_META);
+	AGS_ListBox_RemoveItem(self, (int)luaL_checkint(L,2));
+	return 0;
+};
+static int luags_ListBox_ScrollDown(lua_State *L) {
+	AGS_ListBox* self = luags_checkListBox(L, 1, LISTBOX_UV_META);
+	AGS_ListBox_ScrollDown(self);
+	return 0;
+};
+static int luags_ListBox_ScrollUp(lua_State *L) {
+	AGS_ListBox* self = luags_checkListBox(L, 1, LISTBOX_UV_META);
+	AGS_ListBox_ScrollUp(self);
+	return 0;
+};
+static int luags_ListBox_get_Font(lua_State *L) {
+	AGS_ListBox* self = luags_checkListBox(L, 1, LISTBOX_UV_META);
+	luags_pushFontType(L, AGS_ListBox_get_Font(self));
+	return 1;
+};
+static int luags_ListBox_set_Font(lua_State *L) {
+	AGS_ListBox* self = luags_checkListBox(L, 1, LISTBOX_UV_META);
+	AGS_ListBox_set_Font(self, luags_checkFontType(L,2));
+	return 0;
+};
+static int luags_ListBox_get_HideBorder(lua_State *L) {
+	AGS_ListBox* self = luags_checkListBox(L, 1, LISTBOX_UV_META);
+	lua_pushboolean(L, AGS_ListBox_get_HideBorder(self));
+	return 1;
+};
+static int luags_ListBox_set_HideBorder(lua_State *L) {
+	AGS_ListBox* self = luags_checkListBox(L, 1, LISTBOX_UV_META);
+	AGS_ListBox_set_HideBorder(self, llh_checkboolean(L,2));
+	return 0;
+};
+static int luags_ListBox_get_HideScrollArrows(lua_State *L) {
+	AGS_ListBox* self = luags_checkListBox(L, 1, LISTBOX_UV_META);
+	lua_pushboolean(L, AGS_ListBox_get_HideScrollArrows(self));
+	return 1;
+};
+static int luags_ListBox_set_HideScrollArrows(lua_State *L) {
+	AGS_ListBox* self = luags_checkListBox(L, 1, LISTBOX_UV_META);
+	AGS_ListBox_set_HideScrollArrows(self, llh_checkboolean(L,2));
+	return 0;
+};
+static int luags_ListBox_get_ItemCount(lua_State *L) {
+	AGS_ListBox* self = luags_checkListBox(L, 1, LISTBOX_UV_META);
+	lua_pushinteger(L, AGS_ListBox_get_ItemCount(self));
+	return 1;
+};
+static int luags_ListBox_geti_Items(lua_State *L) {
+	AGS_ListBox* self = luags_checkListBox(L, 1, LISTBOX_UV_META);
+	lua_pushstring(L, AGS_ListBox_geti_Items(self, (int)luaL_checkint(L,2)));
+	return 1;
+};
+static int luags_ListBox_seti_Items(lua_State *L) {
+	AGS_ListBox* self = luags_checkListBox(L, 1, LISTBOX_UV_META);
+	AGS_ListBox_seti_Items(self, (int)luaL_checkint(L,2), luaL_checkstring(L,3));
+	return 0;
+};
+static int luags_ListBox_get_RowCount(lua_State *L) {
+	AGS_ListBox* self = luags_checkListBox(L, 1, LISTBOX_UV_META);
+	lua_pushinteger(L, AGS_ListBox_get_RowCount(self));
+	return 1;
+};
+static int luags_ListBox_geti_SaveGameSlots(lua_State *L) {
+	AGS_ListBox* self = luags_checkListBox(L, 1, LISTBOX_UV_META);
+	lua_pushinteger(L, AGS_ListBox_geti_SaveGameSlots(self, (int)luaL_checkint(L,2)));
+	return 1;
+};
+static int luags_ListBox_get_SelectedIndex(lua_State *L) {
+	AGS_ListBox* self = luags_checkListBox(L, 1, LISTBOX_UV_META);
+	lua_pushinteger(L, AGS_ListBox_get_SelectedIndex(self));
+	return 1;
+};
+static int luags_ListBox_set_SelectedIndex(lua_State *L) {
+	AGS_ListBox* self = luags_checkListBox(L, 1, LISTBOX_UV_META);
+	AGS_ListBox_set_SelectedIndex(self, (int)luaL_checkint(L,2));
+	return 0;
+};
+static int luags_ListBox_get_TopItem(lua_State *L) {
+	AGS_ListBox* self = luags_checkListBox(L, 1, LISTBOX_UV_META);
+	lua_pushinteger(L, AGS_ListBox_get_TopItem(self));
+	return 1;
+};
+static int luags_ListBox_set_TopItem(lua_State *L) {
+	AGS_ListBox* self = luags_checkListBox(L, 1, LISTBOX_UV_META);
+	AGS_ListBox_set_TopItem(self, (int)luaL_checkint(L,2));
+	return 0;
+};
+#undef LISTBOX_UV_META
+#undef LISTBOX_UV_STORE
+#undef LISTBOX_UV_GUI_META
+#undef LISTBOX_UV_GUI_STORE
+
+int luaopen_ags_ListBox(lua_State *L) {
+	int IDX_LIB, IDX_LIB_META;
+	int IDX_LISTBOX_META;
+	int IDX_LISTBOX_STORE;
+	int IDX_GUI_META;
+	int IDX_GUI_STORE;
+	luaL_register(L, "ags.ListBox", llh_null_lib);
+	IDX_LIB = lua_gettop(L);
+	lua_createtable(L,0,2);
+	IDX_LIB_META = lua_gettop(L);
+	lua_pushvalue(L,IDX_LIB_META);
+	lua_setmetatable(L,IDX_LIB);
+	luaL_newmetatable(L, "AGS_ListBox*");
+	IDX_LISTBOX_META = lua_gettop(L);
+	luaL_newmetatable(L, IMMORTAL_OBJECT_STORE);
+	IDX_LISTBOX_STORE = lua_gettop(L);
+	luaL_newmetatable(L, "AGS_GUI*");
+	IDX_GUI_META = lua_gettop(L);
+	luaL_newmetatable(L, IMMORTAL_OBJECT_STORE);
+	IDX_GUI_STORE = lua_gettop(L);
+	lua_getglobal(L, "agsinternal");
+	lua_getfield(L, -1, "initlib");
+	lua_pushvalue(L, IDX_LIB);
+	lua_pushvalue(L, IDX_LIB_META);
+	lua_pushvalue(L, IDX_LISTBOX_META);
+	lua_pushboolean(L, 1);
+	lua_call(L,4,0);
+	lua_pop(L,1); // agsinternal
+	
+	#define ADD_MEMBER(name,f) { \
+		lua_pushliteral(L, #name); \
+		lua_pushvalue(L, IDX_LISTBOX_META); \
+		lua_pushvalue(L, IDX_LISTBOX_STORE); \
+		lua_pushvalue(L, IDX_GUI_META); \
+		lua_pushvalue(L, IDX_GUI_STORE); \
+		lua_pushcclosure(L, f, 4); \
+		lua_rawset(L, IDX_LIB); \
+	}
+	#define ADD_METHOD(name) { if (AGS_ListBox_##name) { ADD_MEMBER(name, luags_ListBox_##name); } }
+	#define INHERIT_METHOD(name,from) { if (AGS_##from##_##name) { ADD_MEMBER(name, luags_ListBox_##name); } }
+	ADD_METHOD(AddItem);
+	ADD_METHOD(Clear);
+	ADD_METHOD(FillDirList);
+	ADD_METHOD(FillSaveGameList);
+	ADD_METHOD(GetItemAtLocation);
+	ADD_METHOD(InsertItemAt);
+	ADD_METHOD(RemoveItem);
+	ADD_METHOD(ScrollDown);
+	ADD_METHOD(ScrollUp);
+	ADD_METHOD(get_Font);
+	ADD_METHOD(set_Font);
+	ADD_METHOD(get_HideBorder);
+	ADD_METHOD(set_HideBorder);
+	ADD_METHOD(get_HideScrollArrows);
+	ADD_METHOD(set_HideScrollArrows);
+	ADD_METHOD(get_ItemCount);
+	ADD_METHOD(geti_Items);
+	ADD_METHOD(seti_Items);
+	ADD_METHOD(get_RowCount);
+	ADD_METHOD(geti_SaveGameSlots);
+	ADD_METHOD(get_SelectedIndex);
+	ADD_METHOD(set_SelectedIndex);
+	ADD_METHOD(get_TopItem);
+	ADD_METHOD(set_TopItem);
+	INHERIT_METHOD(BringToFront, GUIControl);
+	INHERIT_METHOD(SendToBack, GUIControl);
+	INHERIT_METHOD(SetPosition, GUIControl);
+	INHERIT_METHOD(SetSize, GUIControl);
+	INHERIT_METHOD(get_Clickable, GUIControl);
+	INHERIT_METHOD(set_Clickable, GUIControl);
+	INHERIT_METHOD(get_Enabled, GUIControl);
+	INHERIT_METHOD(set_Enabled, GUIControl);
+	INHERIT_METHOD(get_Height, GUIControl);
+	INHERIT_METHOD(set_Height, GUIControl);
+	INHERIT_METHOD(get_ID, GUIControl);
+	INHERIT_METHOD(get_OwningGUI, GUIControl);
+	INHERIT_METHOD(get_Visible, GUIControl);
+	INHERIT_METHOD(set_Visible, GUIControl);
+	INHERIT_METHOD(get_Width, GUIControl);
+	INHERIT_METHOD(set_Width, GUIControl);
+	INHERIT_METHOD(get_X, GUIControl);
+	INHERIT_METHOD(set_X, GUIControl);
+	INHERIT_METHOD(get_Y, GUIControl);
+	INHERIT_METHOD(set_Y, GUIControl);
+	#undef ADD_METHOD
+	#undef INHERIT_METHOD
+	#undef ADD_MEMBER
+	
+	lua_settop(L,IDX_LIB);
+	return 1;
+};
+
+// GUI Lua wrappers
+#define GUI_UV_GUICONTROL_META lua_upvalueindex(1)
+#define GUI_UV_GUICONTROL_STORE lua_upvalueindex(2)
+#define GUI_UV_META lua_upvalueindex(3)
+#define GUI_UV_STORE lua_upvalueindex(4)
+static int luags_GUI_Centre(lua_State *L) {
+	AGS_GUI* self = luags_checkGUI(L, 1, GUI_UV_META);
+	AGS_GUI_Centre(self);
+	return 0;
+};
+static int luags_GUI_GetAtScreenXY(lua_State *L) {
+	luags_pushGUI(L, AGS_GUI_GetAtScreenXY((int)luaL_checkint(L,1), (int)luaL_checkint(L,2)), GUI_UV_META, GUI_UV_STORE);
+	return 1;
+};
+static int luags_GUI_SetPosition(lua_State *L) {
+	AGS_GUI* self = luags_checkGUI(L, 1, GUI_UV_META);
+	AGS_GUI_SetPosition(self, (int)luaL_checkint(L,2), (int)luaL_checkint(L,3));
+	return 0;
+};
+static int luags_GUI_SetSize(lua_State *L) {
+	AGS_GUI* self = luags_checkGUI(L, 1, GUI_UV_META);
+	AGS_GUI_SetSize(self, (int)luaL_checkint(L,2), (int)luaL_checkint(L,3));
+	return 0;
+};
+static int luags_GUI_get_BackgroundGraphic(lua_State *L) {
+	AGS_GUI* self = luags_checkGUI(L, 1, GUI_UV_META);
+	lua_pushinteger(L, AGS_GUI_get_BackgroundGraphic(self));
+	return 1;
+};
+static int luags_GUI_set_BackgroundGraphic(lua_State *L) {
+	AGS_GUI* self = luags_checkGUI(L, 1, GUI_UV_META);
+	AGS_GUI_set_BackgroundGraphic(self, (int)luaL_checkint(L,2));
+	return 0;
+};
+static int luags_GUI_get_Clickable(lua_State *L) {
+	AGS_GUI* self = luags_checkGUI(L, 1, GUI_UV_META);
+	lua_pushboolean(L, AGS_GUI_get_Clickable(self));
+	return 1;
+};
+static int luags_GUI_set_Clickable(lua_State *L) {
+	AGS_GUI* self = luags_checkGUI(L, 1, GUI_UV_META);
+	AGS_GUI_set_Clickable(self, llh_checkboolean(L,2));
+	return 0;
+};
+static int luags_GUI_geti_Controls(lua_State *L) {
+	AGS_GUI* self = luags_checkGUI(L, 1, GUI_UV_META);
+	luags_pushGUIControl(L, AGS_GUI_geti_Controls(self, (int)luaL_checkint(L,2)), GUI_UV_GUICONTROL_META, GUI_UV_GUICONTROL_STORE);
+	return 1;
+};
+static int luags_GUI_get_ControlCount(lua_State *L) {
+	AGS_GUI* self = luags_checkGUI(L, 1, GUI_UV_META);
+	lua_pushinteger(L, AGS_GUI_get_ControlCount(self));
+	return 1;
+};
+static int luags_GUI_get_Height(lua_State *L) {
+	AGS_GUI* self = luags_checkGUI(L, 1, GUI_UV_META);
+	lua_pushinteger(L, AGS_GUI_get_Height(self));
+	return 1;
+};
+static int luags_GUI_set_Height(lua_State *L) {
+	AGS_GUI* self = luags_checkGUI(L, 1, GUI_UV_META);
+	AGS_GUI_set_Height(self, (int)luaL_checkint(L,2));
+	return 0;
+};
+static int luags_GUI_get_ID(lua_State *L) {
+	AGS_GUI* self = luags_checkGUI(L, 1, GUI_UV_META);
+	lua_pushinteger(L, AGS_GUI_get_ID(self));
+	return 1;
+};
+static int luags_GUI_get_Transparency(lua_State *L) {
+	AGS_GUI* self = luags_checkGUI(L, 1, GUI_UV_META);
+	lua_pushinteger(L, AGS_GUI_get_Transparency(self));
+	return 1;
+};
+static int luags_GUI_set_Transparency(lua_State *L) {
+	AGS_GUI* self = luags_checkGUI(L, 1, GUI_UV_META);
+	AGS_GUI_set_Transparency(self, (int)luaL_checkint(L,2));
+	return 0;
+};
+static int luags_GUI_get_Visible(lua_State *L) {
+	AGS_GUI* self = luags_checkGUI(L, 1, GUI_UV_META);
+	lua_pushboolean(L, AGS_GUI_get_Visible(self));
+	return 1;
+};
+static int luags_GUI_set_Visible(lua_State *L) {
+	AGS_GUI* self = luags_checkGUI(L, 1, GUI_UV_META);
+	AGS_GUI_set_Visible(self, llh_checkboolean(L,2));
+	return 0;
+};
+static int luags_GUI_get_Width(lua_State *L) {
+	AGS_GUI* self = luags_checkGUI(L, 1, GUI_UV_META);
+	lua_pushinteger(L, AGS_GUI_get_Width(self));
+	return 1;
+};
+static int luags_GUI_set_Width(lua_State *L) {
+	AGS_GUI* self = luags_checkGUI(L, 1, GUI_UV_META);
+	AGS_GUI_set_Width(self, (int)luaL_checkint(L,2));
+	return 0;
+};
+static int luags_GUI_get_X(lua_State *L) {
+	AGS_GUI* self = luags_checkGUI(L, 1, GUI_UV_META);
+	lua_pushinteger(L, AGS_GUI_get_X(self));
+	return 1;
+};
+static int luags_GUI_set_X(lua_State *L) {
+	AGS_GUI* self = luags_checkGUI(L, 1, GUI_UV_META);
+	AGS_GUI_set_X(self, (int)luaL_checkint(L,2));
+	return 0;
+};
+static int luags_GUI_get_Y(lua_State *L) {
+	AGS_GUI* self = luags_checkGUI(L, 1, GUI_UV_META);
+	lua_pushinteger(L, AGS_GUI_get_Y(self));
+	return 1;
+};
+static int luags_GUI_set_Y(lua_State *L) {
+	AGS_GUI* self = luags_checkGUI(L, 1, GUI_UV_META);
+	AGS_GUI_set_Y(self, (int)luaL_checkint(L,2));
+	return 0;
+};
+static int luags_GUI_get_ZOrder(lua_State *L) {
+	AGS_GUI* self = luags_checkGUI(L, 1, GUI_UV_META);
+	lua_pushinteger(L, AGS_GUI_get_ZOrder(self));
+	return 1;
+};
+static int luags_GUI_set_ZOrder(lua_State *L) {
+	AGS_GUI* self = luags_checkGUI(L, 1, GUI_UV_META);
+	AGS_GUI_set_ZOrder(self, (int)luaL_checkint(L,2));
+	return 0;
+};
+#undef GUI_UV_GUICONTROL_META
+#undef GUI_UV_GUICONTROL_STORE
+#undef GUI_UV_META
+#undef GUI_UV_STORE
+
+int luaopen_ags_GUI(lua_State *L) {
+	int IDX_LIB, IDX_LIB_META;
+	int IDX_GUICONTROL_META;
+	int IDX_GUICONTROL_STORE;
+	int IDX_GUI_META;
+	int IDX_GUI_STORE;
+	luaL_register(L, "ags.GUI", llh_null_lib);
+	IDX_LIB = lua_gettop(L);
+	lua_createtable(L,0,2);
+	IDX_LIB_META = lua_gettop(L);
+	lua_pushvalue(L,IDX_LIB_META);
+	lua_setmetatable(L,IDX_LIB);
+	luaL_newmetatable(L, "AGS_GUIControl*");
+	IDX_GUICONTROL_META = lua_gettop(L);
+	luaL_newmetatable(L, "AGS_GUIControl* store");
+	IDX_GUICONTROL_STORE = lua_gettop(L);
+	luaL_newmetatable(L, "AGS_GUI*");
+	IDX_GUI_META = lua_gettop(L);
+	luaL_newmetatable(L, IMMORTAL_OBJECT_STORE);
+	IDX_GUI_STORE = lua_gettop(L);
+	lua_getglobal(L, "agsinternal");
+	lua_getfield(L, -1, "initlib");
+	lua_pushvalue(L, IDX_LIB);
+	lua_pushvalue(L, IDX_LIB_META);
+	lua_pushvalue(L, IDX_GUI_META);
+	lua_pushboolean(L, 1);
+	lua_call(L,4,0);
+	lua_pop(L,1); // agsinternal
+	
+	#define ADD_MEMBER(name,f) { \
+		lua_pushliteral(L, #name); \
+		lua_pushvalue(L, IDX_GUICONTROL_META); \
+		lua_pushvalue(L, IDX_GUICONTROL_STORE); \
+		lua_pushvalue(L, IDX_GUI_META); \
+		lua_pushvalue(L, IDX_GUI_STORE); \
+		lua_pushcclosure(L, f, 4); \
+		lua_rawset(L, IDX_LIB); \
+	}
+	#define ADD_METHOD(name) { if (AGS_GUI_##name) { ADD_MEMBER(name, luags_GUI_##name); } }
+	ADD_METHOD(Centre);
+	ADD_METHOD(GetAtScreenXY);
+	ADD_METHOD(SetPosition);
+	ADD_METHOD(SetSize);
+	ADD_METHOD(get_BackgroundGraphic);
+	ADD_METHOD(set_BackgroundGraphic);
+	ADD_METHOD(get_Clickable);
+	ADD_METHOD(set_Clickable);
+	ADD_METHOD(geti_Controls);
+	ADD_METHOD(get_ControlCount);
+	ADD_METHOD(get_Height);
+	ADD_METHOD(set_Height);
+	ADD_METHOD(get_ID);
+	ADD_METHOD(get_Transparency);
+	ADD_METHOD(set_Transparency);
+	ADD_METHOD(get_Visible);
+	ADD_METHOD(set_Visible);
+	ADD_METHOD(get_Width);
+	ADD_METHOD(set_Width);
+	ADD_METHOD(get_X);
+	ADD_METHOD(set_X);
+	ADD_METHOD(get_Y);
+	ADD_METHOD(set_Y);
+	ADD_METHOD(get_ZOrder);
+	ADD_METHOD(set_ZOrder);
+	#undef ADD_METHOD
+	#undef ADD_MEMBER
+	
+	lua_settop(L,IDX_LIB);
+	return 1;
+};
+
+// Hotspot Lua wrappers
+#define HOTSPOT_UV_META lua_upvalueindex(1)
+#define HOTSPOT_UV_STORE lua_upvalueindex(2)
+static int luags_Hotspot_GetAtScreenXY(lua_State *L) {
+	luags_pushHotspot(L, AGS_Hotspot_GetAtScreenXY((int)luaL_checkint(L,1), (int)luaL_checkint(L,2)), HOTSPOT_UV_META, HOTSPOT_UV_STORE);
+	return 1;
+};
+static int luags_Hotspot_GetProperty(lua_State *L) {
+	AGS_Hotspot* self = luags_checkHotspot(L, 1, HOTSPOT_UV_META);
+	lua_pushinteger(L, AGS_Hotspot_GetProperty(self, luaL_checkstring(L,2)));
+	return 1;
+};
+static int luags_Hotspot_GetTextProperty(lua_State *L) {
+	AGS_Hotspot* self = luags_checkHotspot(L, 1, HOTSPOT_UV_META);
+	lua_pushstring(L, AGS_Hotspot_GetTextProperty(self, luaL_checkstring(L,2)));
+	return 1;
+};
+static int luags_Hotspot_RunInteraction(lua_State *L) {
+	AGS_Hotspot* self = luags_checkHotspot(L, 1, HOTSPOT_UV_META);
+	AGS_Hotspot_RunInteraction(self, luags_checkCursorMode(L,2));
+	return 0;
+};
+static int luags_Hotspot_get_Enabled(lua_State *L) {
+	AGS_Hotspot* self = luags_checkHotspot(L, 1, HOTSPOT_UV_META);
+	lua_pushboolean(L, AGS_Hotspot_get_Enabled(self));
+	return 1;
+};
+static int luags_Hotspot_set_Enabled(lua_State *L) {
+	AGS_Hotspot* self = luags_checkHotspot(L, 1, HOTSPOT_UV_META);
+	AGS_Hotspot_set_Enabled(self, llh_checkboolean(L,2));
+	return 0;
+};
+static int luags_Hotspot_get_ID(lua_State *L) {
+	AGS_Hotspot* self = luags_checkHotspot(L, 1, HOTSPOT_UV_META);
+	lua_pushinteger(L, AGS_Hotspot_get_ID(self));
+	return 1;
+};
+static int luags_Hotspot_get_Name(lua_State *L) {
+	AGS_Hotspot* self = luags_checkHotspot(L, 1, HOTSPOT_UV_META);
+	lua_pushstring(L, AGS_Hotspot_get_Name(self));
+	return 1;
+};
+static int luags_Hotspot_get_WalkToX(lua_State *L) {
+	AGS_Hotspot* self = luags_checkHotspot(L, 1, HOTSPOT_UV_META);
+	lua_pushinteger(L, AGS_Hotspot_get_WalkToX(self));
+	return 1;
+};
+static int luags_Hotspot_get_WalkToY(lua_State *L) {
+	AGS_Hotspot* self = luags_checkHotspot(L, 1, HOTSPOT_UV_META);
+	lua_pushinteger(L, AGS_Hotspot_get_WalkToY(self));
+	return 1;
+};
+#undef HOTSPOT_UV_META
+#undef HOTSPOT_UV_STORE
+
+int luaopen_ags_Hotspot(lua_State *L) {
+	int IDX_LIB, IDX_LIB_META;
+	int IDX_HOTSPOT_META;
+	int IDX_HOTSPOT_STORE;
+	luaL_register(L, "ags.Hotspot", llh_null_lib);
+	IDX_LIB = lua_gettop(L);
+	lua_createtable(L,0,2);
+	IDX_LIB_META = lua_gettop(L);
+	lua_pushvalue(L,IDX_LIB_META);
+	lua_setmetatable(L,IDX_LIB);
+	luaL_newmetatable(L, "AGS_Hotspot*");
+	IDX_HOTSPOT_META = lua_gettop(L);
+	luaL_newmetatable(L, "AGS_Hotspot* store");
+	IDX_HOTSPOT_STORE = lua_gettop(L);
+	lua_getglobal(L, "agsinternal");
+	lua_getfield(L, -1, "initlib");
+	lua_pushvalue(L, IDX_LIB);
+	lua_pushvalue(L, IDX_LIB_META);
+	lua_pushvalue(L, IDX_HOTSPOT_META);
+	lua_pushboolean(L, 1);
+	lua_call(L,4,0);
+	lua_pop(L,1); // agsinternal
+	lua_pushvalue(L, IDX_HOTSPOT_STORE);
+	lua_setfield(L, IDX_HOTSPOT_META, "__store");
+	lua_getfield(L, LUA_REGISTRYINDEX, "agsinternal");
+	lua_getfield(L, -1, "persistroomthing");
+	lua_setfield(L, IDX_HOTSPOT_META, "__persist");
+	lua_pop(L,1);
+	
+	#define ADD_MEMBER(name,f) { \
+		lua_pushliteral(L, #name); \
+		lua_pushvalue(L, IDX_HOTSPOT_META); \
+		lua_pushvalue(L, IDX_HOTSPOT_STORE); \
+		lua_pushcclosure(L, f, 2); \
+		lua_rawset(L, IDX_LIB); \
+	}
+	#define ADD_METHOD(name) { if (AGS_Hotspot_##name) { ADD_MEMBER(name, luags_Hotspot_##name); } }
+	ADD_METHOD(GetAtScreenXY);
+	ADD_METHOD(GetProperty);
+	ADD_METHOD(GetTextProperty);
+	ADD_METHOD(RunInteraction);
+	ADD_METHOD(get_Enabled);
+	ADD_METHOD(set_Enabled);
+	ADD_METHOD(get_ID);
+	ADD_METHOD(get_Name);
+	ADD_METHOD(get_WalkToX);
+	ADD_METHOD(get_WalkToY);
+	#undef ADD_METHOD
+	#undef ADD_MEMBER
+	
+	lua_settop(L,IDX_LIB);
+	return 1;
+};
+
+// Region Lua wrappers
+#define REGION_UV_META lua_upvalueindex(1)
+#define REGION_UV_STORE lua_upvalueindex(2)
+static int luags_Region_GetAtRoomXY(lua_State *L) {
+	luags_pushRegion(L, AGS_Region_GetAtRoomXY((int)luaL_checkint(L,1), (int)luaL_checkint(L,2)), REGION_UV_META, REGION_UV_STORE);
+	return 1;
+};
+static int luags_Region_RunInteraction(lua_State *L) {
+	AGS_Region* self = luags_checkRegion(L, 1, REGION_UV_META);
+	AGS_Region_RunInteraction(self, (int)luaL_checkint(L,2));
+	return 0;
+};
+static int luags_Region_Tint(lua_State *L) {
+	AGS_Region* self = luags_checkRegion(L, 1, REGION_UV_META);
+	AGS_Region_Tint(self, (int)luaL_checkint(L,2), (int)luaL_checkint(L,3), (int)luaL_checkint(L,4), (int)luaL_checkint(L,5));
+	return 0;
+};
+static int luags_Region_get_Enabled(lua_State *L) {
+	AGS_Region* self = luags_checkRegion(L, 1, REGION_UV_META);
+	lua_pushboolean(L, AGS_Region_get_Enabled(self));
+	return 1;
+};
+static int luags_Region_set_Enabled(lua_State *L) {
+	AGS_Region* self = luags_checkRegion(L, 1, REGION_UV_META);
+	AGS_Region_set_Enabled(self, llh_checkboolean(L,2));
+	return 0;
+};
+static int luags_Region_get_ID(lua_State *L) {
+	AGS_Region* self = luags_checkRegion(L, 1, REGION_UV_META);
+	lua_pushinteger(L, AGS_Region_get_ID(self));
+	return 1;
+};
+static int luags_Region_get_LightLevel(lua_State *L) {
+	AGS_Region* self = luags_checkRegion(L, 1, REGION_UV_META);
+	lua_pushinteger(L, AGS_Region_get_LightLevel(self));
+	return 1;
+};
+static int luags_Region_set_LightLevel(lua_State *L) {
+	AGS_Region* self = luags_checkRegion(L, 1, REGION_UV_META);
+	AGS_Region_set_LightLevel(self, (int)luaL_checkint(L,2));
+	return 0;
+};
+static int luags_Region_get_TintEnabled(lua_State *L) {
+	AGS_Region* self = luags_checkRegion(L, 1, REGION_UV_META);
+	lua_pushboolean(L, AGS_Region_get_TintEnabled(self));
+	return 1;
+};
+static int luags_Region_get_TintBlue(lua_State *L) {
+	AGS_Region* self = luags_checkRegion(L, 1, REGION_UV_META);
+	lua_pushinteger(L, AGS_Region_get_TintBlue(self));
+	return 1;
+};
+static int luags_Region_get_TintGreen(lua_State *L) {
+	AGS_Region* self = luags_checkRegion(L, 1, REGION_UV_META);
+	lua_pushinteger(L, AGS_Region_get_TintGreen(self));
+	return 1;
+};
+static int luags_Region_get_TintRed(lua_State *L) {
+	AGS_Region* self = luags_checkRegion(L, 1, REGION_UV_META);
+	lua_pushinteger(L, AGS_Region_get_TintRed(self));
+	return 1;
+};
+static int luags_Region_get_TintSaturation(lua_State *L) {
+	AGS_Region* self = luags_checkRegion(L, 1, REGION_UV_META);
+	lua_pushinteger(L, AGS_Region_get_TintSaturation(self));
+	return 1;
+};
+#undef REGION_UV_META
+#undef REGION_UV_STORE
+
+int luaopen_ags_Region(lua_State *L) {
+	int IDX_LIB, IDX_LIB_META;
+	int IDX_REGION_META;
+	int IDX_REGION_STORE;
+	luaL_register(L, "ags.Region", llh_null_lib);
+	IDX_LIB = lua_gettop(L);
+	lua_createtable(L,0,2);
+	IDX_LIB_META = lua_gettop(L);
+	lua_pushvalue(L,IDX_LIB_META);
+	lua_setmetatable(L,IDX_LIB);
+	luaL_newmetatable(L, "AGS_Region*");
+	IDX_REGION_META = lua_gettop(L);
+	luaL_newmetatable(L, "AGS_Region* store");
+	IDX_REGION_STORE = lua_gettop(L);
+	lua_getglobal(L, "agsinternal");
+	lua_getfield(L, -1, "initlib");
+	lua_pushvalue(L, IDX_LIB);
+	lua_pushvalue(L, IDX_LIB_META);
+	lua_pushvalue(L, IDX_REGION_META);
+	lua_pushboolean(L, 1);
+	lua_call(L,4,0);
+	lua_pop(L,1); // agsinternal
+	lua_pushvalue(L, IDX_REGION_STORE);
+	lua_setfield(L, IDX_REGION_META, "__store");
+	lua_getfield(L, LUA_REGISTRYINDEX, "agsinternal");
+	lua_getfield(L, -1, "persistroomthing");
+	lua_setfield(L, IDX_REGION_META, "__persist");
+	lua_pop(L,1);
+	
+	#define ADD_MEMBER(name,f) { \
+		lua_pushliteral(L, #name); \
+		lua_pushvalue(L, IDX_REGION_META); \
+		lua_pushvalue(L, IDX_REGION_STORE); \
+		lua_pushcclosure(L, f, 2); \
+		lua_rawset(L, IDX_LIB); \
+	}
+	#define ADD_METHOD(name) { if (AGS_Region_##name) { ADD_MEMBER(name, luags_Region_##name); } }
+	ADD_METHOD(GetAtRoomXY);
+	ADD_METHOD(RunInteraction);
+	ADD_METHOD(Tint);
+	ADD_METHOD(get_Enabled);
+	ADD_METHOD(set_Enabled);
+	ADD_METHOD(get_ID);
+	ADD_METHOD(get_LightLevel);
+	ADD_METHOD(set_LightLevel);
+	ADD_METHOD(get_TintEnabled);
+	ADD_METHOD(get_TintBlue);
+	ADD_METHOD(get_TintGreen);
+	ADD_METHOD(get_TintRed);
+	ADD_METHOD(get_TintSaturation);
+	#undef ADD_METHOD
+	#undef ADD_MEMBER
+	
+	lua_settop(L,IDX_LIB);
+	return 1;
+};
+
+// Dialog Lua wrappers
+#define DIALOG_UV_META lua_upvalueindex(1)
+#define DIALOG_UV_STORE lua_upvalueindex(2)
+static int luags_Dialog_DisplayOptions(lua_State *L) {
+	AGS_Dialog* self = luags_checkDialog(L, 1, DIALOG_UV_META);
+	lua_pushinteger(L, AGS_Dialog_DisplayOptions(self, (int)luaL_optint(L,2,AGS_eSayUseOptionSetting)));
+	return 1;
+};
+static int luags_Dialog_GetOptionState(lua_State *L) {
+	AGS_Dialog* self = luags_checkDialog(L, 1, DIALOG_UV_META);
+	luags_pushDialogOptionState(L, AGS_Dialog_GetOptionState(self, (int)luaL_checkint(L,2)));
+	return 1;
+};
+static int luags_Dialog_GetOptionText(lua_State *L) {
+	AGS_Dialog* self = luags_checkDialog(L, 1, DIALOG_UV_META);
+	lua_pushstring(L, AGS_Dialog_GetOptionText(self, (int)luaL_checkint(L,2)));
+	return 1;
+};
+static int luags_Dialog_HasOptionBeenChosen(lua_State *L) {
+	AGS_Dialog* self = luags_checkDialog(L, 1, DIALOG_UV_META);
+	lua_pushboolean(L, AGS_Dialog_HasOptionBeenChosen(self, (int)luaL_checkint(L,2)));
+	return 1;
+};
+static int luags_Dialog_SetOptionState(lua_State *L) {
+	AGS_Dialog* self = luags_checkDialog(L, 1, DIALOG_UV_META);
+	AGS_Dialog_SetOptionState(self, (int)luaL_checkint(L,2), luags_checkDialogOptionState(L,3));
+	return 0;
+};
+static int luags_Dialog_Start(lua_State *L) {
+	AGS_Dialog* self = luags_checkDialog(L, 1, DIALOG_UV_META);
+	AGS_Dialog_Start(self);
+	return 0;
+};
+static int luags_Dialog_get_ID(lua_State *L) {
+	AGS_Dialog* self = luags_checkDialog(L, 1, DIALOG_UV_META);
+	lua_pushinteger(L, AGS_Dialog_get_ID(self));
+	return 1;
+};
+static int luags_Dialog_get_OptionCount(lua_State *L) {
+	AGS_Dialog* self = luags_checkDialog(L, 1, DIALOG_UV_META);
+	lua_pushinteger(L, AGS_Dialog_get_OptionCount(self));
+	return 1;
+};
+#undef DIALOG_UV_META
+#undef DIALOG_UV_STORE
+
+int luaopen_ags_Dialog(lua_State *L) {
+	int IDX_LIB, IDX_LIB_META;
+	int IDX_DIALOG_META;
+	int IDX_DIALOG_STORE;
+	luaL_register(L, "ags.Dialog", llh_null_lib);
+	IDX_LIB = lua_gettop(L);
+	lua_createtable(L,0,2);
+	IDX_LIB_META = lua_gettop(L);
+	lua_pushvalue(L,IDX_LIB_META);
+	lua_setmetatable(L,IDX_LIB);
+	luaL_newmetatable(L, "AGS_Dialog*");
+	IDX_DIALOG_META = lua_gettop(L);
+	luaL_newmetatable(L, IMMORTAL_OBJECT_STORE);
+	IDX_DIALOG_STORE = lua_gettop(L);
+	lua_getglobal(L, "agsinternal");
+	lua_getfield(L, -1, "initlib");
+	lua_pushvalue(L, IDX_LIB);
+	lua_pushvalue(L, IDX_LIB_META);
+	lua_pushvalue(L, IDX_DIALOG_META);
+	lua_pushboolean(L, 1);
+	lua_call(L,4,0);
+	lua_pop(L,1); // agsinternal
+	
+	#define ADD_MEMBER(name,f) { \
+		lua_pushliteral(L, #name); \
+		lua_pushvalue(L, IDX_DIALOG_META); \
+		lua_pushvalue(L, IDX_DIALOG_STORE); \
+		lua_pushcclosure(L, f, 2); \
+		lua_rawset(L, IDX_LIB); \
+	}
+	#define ADD_METHOD(name) { if (AGS_Dialog_##name) { ADD_MEMBER(name, luags_Dialog_##name); } }
+	ADD_METHOD(DisplayOptions);
+	ADD_METHOD(GetOptionState);
+	ADD_METHOD(GetOptionText);
+	ADD_METHOD(HasOptionBeenChosen);
+	ADD_METHOD(SetOptionState);
+	ADD_METHOD(Start);
+	ADD_METHOD(get_ID);
+	ADD_METHOD(get_OptionCount);
+	#undef ADD_METHOD
+	#undef ADD_MEMBER
+	
+	lua_settop(L,IDX_LIB);
+	return 1;
+};
+
+// DateTime Lua wrappers
+#define DATETIME_UV_META lua_upvalueindex(1)
+#define DATETIME_UV_STORE lua_upvalueindex(2)
+static int luags_DateTime_get_Now(lua_State *L) {
+	luags_pushDateTime(L, AGS_DateTime_get_Now(), DATETIME_UV_META, DATETIME_UV_STORE);
+	return 1;
+};
+static int luags_DateTime_get_Year(lua_State *L) {
+	AGS_DateTime* self = luags_checkDateTime(L, 1, DATETIME_UV_META);
+	lua_pushinteger(L, AGS_DateTime_get_Year(self));
+	return 1;
+};
+static int luags_DateTime_get_Month(lua_State *L) {
+	AGS_DateTime* self = luags_checkDateTime(L, 1, DATETIME_UV_META);
+	lua_pushinteger(L, AGS_DateTime_get_Month(self));
+	return 1;
+};
+static int luags_DateTime_get_DayOfMonth(lua_State *L) {
+	AGS_DateTime* self = luags_checkDateTime(L, 1, DATETIME_UV_META);
+	lua_pushinteger(L, AGS_DateTime_get_DayOfMonth(self));
+	return 1;
+};
+static int luags_DateTime_get_Hour(lua_State *L) {
+	AGS_DateTime* self = luags_checkDateTime(L, 1, DATETIME_UV_META);
+	lua_pushinteger(L, AGS_DateTime_get_Hour(self));
+	return 1;
+};
+static int luags_DateTime_get_Minute(lua_State *L) {
+	AGS_DateTime* self = luags_checkDateTime(L, 1, DATETIME_UV_META);
+	lua_pushinteger(L, AGS_DateTime_get_Minute(self));
+	return 1;
+};
+static int luags_DateTime_get_Second(lua_State *L) {
+	AGS_DateTime* self = luags_checkDateTime(L, 1, DATETIME_UV_META);
+	lua_pushinteger(L, AGS_DateTime_get_Second(self));
+	return 1;
+};
+static int luags_DateTime_get_RawTime(lua_State *L) {
+	AGS_DateTime* self = luags_checkDateTime(L, 1, DATETIME_UV_META);
+	lua_pushinteger(L, AGS_DateTime_get_RawTime(self));
+	return 1;
+};
+#undef DATETIME_UV_META
+#undef DATETIME_UV_STORE
+
+int luaopen_ags_DateTime(lua_State *L) {
+	int IDX_LIB, IDX_LIB_META;
+	int IDX_DATETIME_META;
+	int IDX_DATETIME_STORE;
+	luaL_register(L, "ags.DateTime", llh_null_lib);
+	IDX_LIB = lua_gettop(L);
+	lua_createtable(L,0,2);
+	IDX_LIB_META = lua_gettop(L);
+	lua_pushvalue(L,IDX_LIB_META);
+	lua_setmetatable(L,IDX_LIB);
+	luaL_newmetatable(L, "AGS_DateTime*");
+	IDX_DATETIME_META = lua_gettop(L);
+	luaL_newmetatable(L, "AGS_DateTime* store");
+	IDX_DATETIME_STORE = lua_gettop(L);
+	lua_getglobal(L, "agsinternal");
+	lua_getfield(L, -1, "initlib");
+	lua_pushvalue(L, IDX_LIB);
+	lua_pushvalue(L, IDX_LIB_META);
+	lua_pushvalue(L, IDX_DATETIME_META);
+	lua_pushboolean(L, 1);
+	lua_call(L,4,0);
+	lua_pop(L,1); // agsinternal
+	luaL_newmetatable(L, "Weak");
+	lua_pushliteral(L, "__mode");
+	lua_pushliteral(L, "v");
+	lua_rawset(L,-3);
+	lua_setmetatable(L, IDX_DATETIME_STORE);
+	lua_pushcfunction(L, AGS_Ephemeral__gc);
+	lua_setfield(L, IDX_DATETIME_META, "__gc");
+	lua_pushvalue(L, IDX_DATETIME_STORE);
+	lua_setfield(L, IDX_DATETIME_META, "__store");
+	lua_getfield(L, LUA_REGISTRYINDEX, "agsinternal");
+	lua_getfield(L, -1, "persistephemeral");
+	lua_setfield(L, IDX_DATETIME_META, "__persist");
+	lua_pop(L,1);
+	
+	#define ADD_MEMBER(name,f) { \
+		lua_pushliteral(L, #name); \
+		lua_pushvalue(L, IDX_DATETIME_META); \
+		lua_pushvalue(L, IDX_DATETIME_STORE); \
+		lua_pushcclosure(L, f, 2); \
+		lua_rawset(L, IDX_LIB); \
+	}
+	#define ADD_METHOD(name) { if (AGS_DateTime_##name) { ADD_MEMBER(name, luags_DateTime_##name); } }
+	ADD_METHOD(get_Now);
+	ADD_METHOD(get_Year);
+	ADD_METHOD(get_Month);
+	ADD_METHOD(get_DayOfMonth);
+	ADD_METHOD(get_Hour);
+	ADD_METHOD(get_Minute);
+	ADD_METHOD(get_Second);
+	ADD_METHOD(get_RawTime);
+	#undef ADD_METHOD
+	#undef ADD_MEMBER
+	
+	lua_settop(L,IDX_LIB);
+	return 1;
+};
+
+// AudioChannel Lua wrappers
+#define AUDIOCHANNEL_UV_AUDIOCLIP_META lua_upvalueindex(1)
+#define AUDIOCHANNEL_UV_AUDIOCLIP_STORE lua_upvalueindex(2)
+#define AUDIOCHANNEL_UV_META lua_upvalueindex(3)
+#define AUDIOCHANNEL_UV_STORE lua_upvalueindex(4)
+static int luags_AudioChannel_Seek(lua_State *L) {
+	AGS_AudioChannel* self = luags_checkAudioChannel(L, 1, AUDIOCHANNEL_UV_META);
+	AGS_AudioChannel_Seek(self, (int)luaL_checkint(L,2));
+	return 0;
+};
+static int luags_AudioChannel_SetRoomLocation(lua_State *L) {
+	AGS_AudioChannel* self = luags_checkAudioChannel(L, 1, AUDIOCHANNEL_UV_META);
+	AGS_AudioChannel_SetRoomLocation(self, (int)luaL_checkint(L,2), (int)luaL_checkint(L,3));
+	return 0;
+};
+static int luags_AudioChannel_Stop(lua_State *L) {
+	AGS_AudioChannel* self = luags_checkAudioChannel(L, 1, AUDIOCHANNEL_UV_META);
+	AGS_AudioChannel_Stop(self);
+	return 0;
+};
+static int luags_AudioChannel_get_ID(lua_State *L) {
+	AGS_AudioChannel* self = luags_checkAudioChannel(L, 1, AUDIOCHANNEL_UV_META);
+	lua_pushinteger(L, AGS_AudioChannel_get_ID(self));
+	return 1;
+};
+static int luags_AudioChannel_get_IsPlaying(lua_State *L) {
+	AGS_AudioChannel* self = luags_checkAudioChannel(L, 1, AUDIOCHANNEL_UV_META);
+	lua_pushboolean(L, AGS_AudioChannel_get_IsPlaying(self));
+	return 1;
+};
+static int luags_AudioChannel_get_LengthMs(lua_State *L) {
+	AGS_AudioChannel* self = luags_checkAudioChannel(L, 1, AUDIOCHANNEL_UV_META);
+	lua_pushinteger(L, AGS_AudioChannel_get_LengthMs(self));
+	return 1;
+};
+static int luags_AudioChannel_get_Panning(lua_State *L) {
+	AGS_AudioChannel* self = luags_checkAudioChannel(L, 1, AUDIOCHANNEL_UV_META);
+	lua_pushinteger(L, AGS_AudioChannel_get_Panning(self));
+	return 1;
+};
+static int luags_AudioChannel_set_Panning(lua_State *L) {
+	AGS_AudioChannel* self = luags_checkAudioChannel(L, 1, AUDIOCHANNEL_UV_META);
+	AGS_AudioChannel_set_Panning(self, (int)luaL_checkint(L,2));
+	return 0;
+};
+static int luags_AudioChannel_get_PlayingClip(lua_State *L) {
+	AGS_AudioChannel* self = luags_checkAudioChannel(L, 1, AUDIOCHANNEL_UV_META);
+	luags_pushAudioClip(L, AGS_AudioChannel_get_PlayingClip(self), AUDIOCHANNEL_UV_AUDIOCLIP_META, AUDIOCHANNEL_UV_AUDIOCLIP_STORE);
+	return 1;
+};
+static int luags_AudioChannel_get_Position(lua_State *L) {
+	AGS_AudioChannel* self = luags_checkAudioChannel(L, 1, AUDIOCHANNEL_UV_META);
+	lua_pushinteger(L, AGS_AudioChannel_get_Position(self));
+	return 1;
+};
+static int luags_AudioChannel_get_PositionMs(lua_State *L) {
+	AGS_AudioChannel* self = luags_checkAudioChannel(L, 1, AUDIOCHANNEL_UV_META);
+	lua_pushinteger(L, AGS_AudioChannel_get_PositionMs(self));
+	return 1;
+};
+static int luags_AudioChannel_get_Volume(lua_State *L) {
+	AGS_AudioChannel* self = luags_checkAudioChannel(L, 1, AUDIOCHANNEL_UV_META);
+	lua_pushinteger(L, AGS_AudioChannel_get_Volume(self));
+	return 1;
+};
+static int luags_AudioChannel_set_Volume(lua_State *L) {
+	AGS_AudioChannel* self = luags_checkAudioChannel(L, 1, AUDIOCHANNEL_UV_META);
+	AGS_AudioChannel_set_Volume(self, (int)luaL_checkint(L,2));
+	return 0;
+};
+#undef AUDIOCHANNEL_UV_AUDIOCLIP_META
+#undef AUDIOCHANNEL_UV_AUDIOCLIP_STORE
+#undef AUDIOCHANNEL_UV_META
+#undef AUDIOCHANNEL_UV_STORE
+
+int luaopen_ags_AudioChannel(lua_State *L) {
+	int IDX_LIB, IDX_LIB_META;
+	int IDX_AUDIOCLIP_META;
+	int IDX_AUDIOCLIP_STORE;
+	int IDX_AUDIOCHANNEL_META;
+	int IDX_AUDIOCHANNEL_STORE;
+	luaL_register(L, "ags.AudioChannel", llh_null_lib);
+	IDX_LIB = lua_gettop(L);
+	lua_createtable(L,0,2);
+	IDX_LIB_META = lua_gettop(L);
+	lua_pushvalue(L,IDX_LIB_META);
+	lua_setmetatable(L,IDX_LIB);
+	luaL_newmetatable(L, "AGS_AudioClip*");
+	IDX_AUDIOCLIP_META = lua_gettop(L);
+	luaL_newmetatable(L, IMMORTAL_OBJECT_STORE);
+	IDX_AUDIOCLIP_STORE = lua_gettop(L);
+	luaL_newmetatable(L, "AGS_AudioChannel*");
+	IDX_AUDIOCHANNEL_META = lua_gettop(L);
+	luaL_newmetatable(L, "AGS_AudioChannel* store");
+	IDX_AUDIOCHANNEL_STORE = lua_gettop(L);
+	lua_getglobal(L, "agsinternal");
+	lua_getfield(L, -1, "initlib");
+	lua_pushvalue(L, IDX_LIB);
+	lua_pushvalue(L, IDX_LIB_META);
+	lua_pushvalue(L, IDX_AUDIOCHANNEL_META);
+	lua_pushboolean(L, 1);
+	lua_call(L,4,0);
+	lua_pop(L,1); // agsinternal
+	luaL_newmetatable(L, "Weak");
+	lua_pushliteral(L, "__mode");
+	lua_pushliteral(L, "v");
+	lua_rawset(L,-3);
+	lua_setmetatable(L, IDX_AUDIOCHANNEL_STORE);
+	lua_pushcfunction(L, AGS_Ephemeral__gc);
+	lua_setfield(L, IDX_AUDIOCHANNEL_META, "__gc");
+	lua_pushvalue(L, IDX_AUDIOCHANNEL_STORE);
+	lua_setfield(L, IDX_AUDIOCHANNEL_META, "__store");
+	lua_getfield(L, LUA_REGISTRYINDEX, "agsinternal");
+	lua_getfield(L, -1, "persistephemeral");
+	lua_setfield(L, IDX_AUDIOCHANNEL_META, "__persist");
+	lua_pop(L,1);
+	
+	#define ADD_MEMBER(name,f) { \
+		lua_pushliteral(L, #name); \
+		lua_pushvalue(L, IDX_AUDIOCLIP_META); \
+		lua_pushvalue(L, IDX_AUDIOCLIP_STORE); \
+		lua_pushvalue(L, IDX_AUDIOCHANNEL_META); \
+		lua_pushvalue(L, IDX_AUDIOCHANNEL_STORE); \
+		lua_pushcclosure(L, f, 4); \
+		lua_rawset(L, IDX_LIB); \
+	}
+	#define ADD_METHOD(name) { if (AGS_AudioChannel_##name) { ADD_MEMBER(name, luags_AudioChannel_##name); } }
+	ADD_METHOD(Seek);
+	ADD_METHOD(SetRoomLocation);
+	ADD_METHOD(Stop);
+	ADD_METHOD(get_ID);
+	ADD_METHOD(get_IsPlaying);
+	ADD_METHOD(get_LengthMs);
+	ADD_METHOD(get_Panning);
+	ADD_METHOD(set_Panning);
+	ADD_METHOD(get_PlayingClip);
+	ADD_METHOD(get_Position);
+	ADD_METHOD(get_PositionMs);
+	ADD_METHOD(get_Volume);
+	ADD_METHOD(set_Volume);
+	#undef ADD_METHOD
+	#undef ADD_MEMBER
+	
+	lua_settop(L,IDX_LIB);
+	return 1;
+};
+
+// AudioClip Lua wrappers
+#define AUDIOCLIP_UV_META lua_upvalueindex(1)
+#define AUDIOCLIP_UV_STORE lua_upvalueindex(2)
+#define AUDIOCLIP_UV_AUDIOCHANNEL_META lua_upvalueindex(3)
+#define AUDIOCLIP_UV_AUDIOCHANNEL_STORE lua_upvalueindex(4)
+static int luags_AudioClip_Play(lua_State *L) {
+	AGS_AudioClip* self = luags_checkAudioClip(L, 1, AUDIOCLIP_UV_META);
+	luags_pushAudioChannel(L, AGS_AudioClip_Play(self, (int)luaL_optint(L,2,AGS_SCR_NO_VALUE), (int)luaL_optint(L,3,AGS_SCR_NO_VALUE)), AUDIOCLIP_UV_AUDIOCHANNEL_META, AUDIOCLIP_UV_AUDIOCHANNEL_STORE);
+	return 1;
+};
+static int luags_AudioClip_PlayFrom(lua_State *L) {
+	AGS_AudioClip* self = luags_checkAudioClip(L, 1, AUDIOCLIP_UV_META);
+	luags_pushAudioChannel(L, AGS_AudioClip_PlayFrom(self, (int)luaL_checkint(L,2), (int)luaL_optint(L,3,AGS_SCR_NO_VALUE), (int)luaL_optint(L,4,AGS_SCR_NO_VALUE)), AUDIOCLIP_UV_AUDIOCHANNEL_META, AUDIOCLIP_UV_AUDIOCHANNEL_STORE);
+	return 1;
+};
+static int luags_AudioClip_PlayQueued(lua_State *L) {
+	AGS_AudioClip* self = luags_checkAudioClip(L, 1, AUDIOCLIP_UV_META);
+	luags_pushAudioChannel(L, AGS_AudioClip_PlayQueued(self, (int)luaL_optint(L,2,AGS_SCR_NO_VALUE), (int)luaL_optint(L,3,AGS_SCR_NO_VALUE)), AUDIOCLIP_UV_AUDIOCHANNEL_META, AUDIOCLIP_UV_AUDIOCHANNEL_STORE);
+	return 1;
+};
+static int luags_AudioClip_Stop(lua_State *L) {
+	AGS_AudioClip* self = luags_checkAudioClip(L, 1, AUDIOCLIP_UV_META);
+	AGS_AudioClip_Stop(self);
+	return 0;
+};
+static int luags_AudioClip_get_FileType(lua_State *L) {
+	AGS_AudioClip* self = luags_checkAudioClip(L, 1, AUDIOCLIP_UV_META);
+	luags_pushAudioFileType(L, AGS_AudioClip_get_FileType(self));
+	return 1;
+};
+static int luags_AudioClip_get_IsAvailable(lua_State *L) {
+	AGS_AudioClip* self = luags_checkAudioClip(L, 1, AUDIOCLIP_UV_META);
+	lua_pushboolean(L, AGS_AudioClip_get_IsAvailable(self));
+	return 1;
+};
+static int luags_AudioClip_get_Type(lua_State *L) {
+	AGS_AudioClip* self = luags_checkAudioClip(L, 1, AUDIOCLIP_UV_META);
+	luags_pushAudioType(L, AGS_AudioClip_get_Type(self));
+	return 1;
+};
+#undef AUDIOCLIP_UV_META
+#undef AUDIOCLIP_UV_STORE
+#undef AUDIOCLIP_UV_AUDIOCHANNEL_META
+#undef AUDIOCLIP_UV_AUDIOCHANNEL_STORE
+
+int luaopen_ags_AudioClip(lua_State *L) {
+	int IDX_LIB, IDX_LIB_META;
+	int IDX_AUDIOCLIP_META;
+	int IDX_AUDIOCLIP_STORE;
+	int IDX_AUDIOCHANNEL_META;
+	int IDX_AUDIOCHANNEL_STORE;
+	luaL_register(L, "ags.AudioClip", llh_null_lib);
+	IDX_LIB = lua_gettop(L);
+	lua_createtable(L,0,2);
+	IDX_LIB_META = lua_gettop(L);
+	lua_pushvalue(L,IDX_LIB_META);
+	lua_setmetatable(L,IDX_LIB);
+	luaL_newmetatable(L, "AGS_AudioClip*");
+	IDX_AUDIOCLIP_META = lua_gettop(L);
+	luaL_newmetatable(L, IMMORTAL_OBJECT_STORE);
+	IDX_AUDIOCLIP_STORE = lua_gettop(L);
+	luaL_newmetatable(L, "AGS_AudioChannel*");
+	IDX_AUDIOCHANNEL_META = lua_gettop(L);
+	luaL_newmetatable(L, "AGS_AudioChannel* store");
+	IDX_AUDIOCHANNEL_STORE = lua_gettop(L);
+	lua_getglobal(L, "agsinternal");
+	lua_getfield(L, -1, "initlib");
+	lua_pushvalue(L, IDX_LIB);
+	lua_pushvalue(L, IDX_LIB_META);
+	lua_pushvalue(L, IDX_AUDIOCLIP_META);
+	lua_pushboolean(L, 1);
+	lua_call(L,4,0);
+	lua_pop(L,1); // agsinternal
+	
+	#define ADD_MEMBER(name,f) { \
+		lua_pushliteral(L, #name); \
+		lua_pushvalue(L, IDX_AUDIOCLIP_META); \
+		lua_pushvalue(L, IDX_AUDIOCLIP_STORE); \
+		lua_pushvalue(L, IDX_AUDIOCHANNEL_META); \
+		lua_pushvalue(L, IDX_AUDIOCHANNEL_STORE); \
+		lua_pushcclosure(L, f, 4); \
+		lua_rawset(L, IDX_LIB); \
+	}
+	#define ADD_METHOD(name) { if (AGS_AudioClip_##name) { ADD_MEMBER(name, luags_AudioClip_##name); } }
+	ADD_METHOD(Play);
+	ADD_METHOD(PlayFrom);
+	ADD_METHOD(PlayQueued);
+	ADD_METHOD(Stop);
+	ADD_METHOD(get_FileType);
+	ADD_METHOD(get_IsAvailable);
+	ADD_METHOD(get_Type);
+	#undef ADD_METHOD
+	#undef ADD_MEMBER
+	
+	lua_settop(L,IDX_LIB);
+	return 1;
+};
+
+// System Lua wrappers
+#define SYSTEM_UV_AUDIOCHANNEL_META lua_upvalueindex(1)
+#define SYSTEM_UV_AUDIOCHANNEL_STORE lua_upvalueindex(2)
+static int luags_System_get_CapsLock(lua_State *L) {
+	lua_pushboolean(L, AGS_System_get_CapsLock());
+	return 1;
+};
+static int luags_System_geti_AudioChannels(lua_State *L) {
+	luags_pushAudioChannel(L, AGS_System_geti_AudioChannels((int)luaL_checkint(L,1)), SYSTEM_UV_AUDIOCHANNEL_META, SYSTEM_UV_AUDIOCHANNEL_STORE);
+	return 1;
+};
+static int luags_System_get_AudioChannelCount(lua_State *L) {
+	lua_pushinteger(L, AGS_System_get_AudioChannelCount());
+	return 1;
+};
+static int luags_System_get_ColorDepth(lua_State *L) {
+	lua_pushinteger(L, AGS_System_get_ColorDepth());
+	return 1;
+};
+static int luags_System_get_Gamma(lua_State *L) {
+	lua_pushinteger(L, AGS_System_get_Gamma());
+	return 1;
+};
+static int luags_System_set_Gamma(lua_State *L) {
+	AGS_System_set_Gamma((int)luaL_checkint(L,1));
+	return 0;
+};
+static int luags_System_get_HardwareAcceleration(lua_State *L) {
+	lua_pushboolean(L, AGS_System_get_HardwareAcceleration());
+	return 1;
+};
+static int luags_System_get_NumLock(lua_State *L) {
+	lua_pushboolean(L, AGS_System_get_NumLock());
+	return 1;
+};
+static int luags_System_get_OperatingSystem(lua_State *L) {
+	luags_pusheOperatingSystem(L, AGS_System_get_OperatingSystem());
+	return 1;
+};
+static int luags_System_get_ScreenHeight(lua_State *L) {
+	lua_pushinteger(L, AGS_System_get_ScreenHeight());
+	return 1;
+};
+static int luags_System_get_ScreenWidth(lua_State *L) {
+	lua_pushinteger(L, AGS_System_get_ScreenWidth());
+	return 1;
+};
+static int luags_System_get_ScrollLock(lua_State *L) {
+	lua_pushboolean(L, AGS_System_get_ScrollLock());
+	return 1;
+};
+static int luags_System_get_SupportsGammaControl(lua_State *L) {
+	lua_pushboolean(L, AGS_System_get_SupportsGammaControl());
+	return 1;
+};
+static int luags_System_get_Version(lua_State *L) {
+	lua_pushstring(L, AGS_System_get_Version());
+	return 1;
+};
+static int luags_System_get_ViewportHeight(lua_State *L) {
+	lua_pushinteger(L, AGS_System_get_ViewportHeight());
+	return 1;
+};
+static int luags_System_get_ViewportWidth(lua_State *L) {
+	lua_pushinteger(L, AGS_System_get_ViewportWidth());
+	return 1;
+};
+static int luags_System_get_Volume(lua_State *L) {
+	lua_pushinteger(L, AGS_System_get_Volume());
+	return 1;
+};
+static int luags_System_set_Volume(lua_State *L) {
+	AGS_System_set_Volume((int)luaL_checkint(L,1));
+	return 0;
+};
+static int luags_System_get_VSync(lua_State *L) {
+	lua_pushboolean(L, AGS_System_get_VSync());
+	return 1;
+};
+static int luags_System_set_VSync(lua_State *L) {
+	AGS_System_set_VSync(llh_checkboolean(L,1));
+	return 0;
+};
+static int luags_System_get_Windowed(lua_State *L) {
+	lua_pushboolean(L, AGS_System_get_Windowed());
+	return 1;
+};
+#undef SYSTEM_UV_AUDIOCHANNEL_META
+#undef SYSTEM_UV_AUDIOCHANNEL_STORE
+
+int luaopen_ags_System(lua_State *L) {
+	int IDX_LIB, IDX_LIB_META;
+	int IDX_AUDIOCHANNEL_META;
+	int IDX_AUDIOCHANNEL_STORE;
+	luaL_register(L, "ags.System", llh_null_lib);
+	IDX_LIB = lua_gettop(L);
+	lua_createtable(L,0,2);
+	IDX_LIB_META = lua_gettop(L);
+	lua_pushvalue(L,IDX_LIB_META);
+	lua_setmetatable(L,IDX_LIB);
+	luaL_newmetatable(L, "AGS_AudioChannel*");
+	IDX_AUDIOCHANNEL_META = lua_gettop(L);
+	luaL_newmetatable(L, "AGS_AudioChannel* store");
+	IDX_AUDIOCHANNEL_STORE = lua_gettop(L);
+	lua_getglobal(L, "agsinternal");
+	lua_getfield(L, -1, "initlib");
+	lua_pushvalue(L, IDX_LIB);
+	lua_pushvalue(L, IDX_LIB_META);
+	lua_call(L,2,0);
+	lua_pop(L,1); // agsinternal
+	
+	#define ADD_MEMBER(name,f) { \
+		lua_pushliteral(L, #name); \
+		lua_pushvalue(L, IDX_AUDIOCHANNEL_META); \
+		lua_pushvalue(L, IDX_AUDIOCHANNEL_STORE); \
+		lua_pushcclosure(L, f, 2); \
+		lua_rawset(L, IDX_LIB); \
+	}
+	#define ADD_METHOD(name) { if (AGS_System_##name) { ADD_MEMBER(name, luags_System_##name); } }
+	ADD_METHOD(get_CapsLock);
+	ADD_METHOD(geti_AudioChannels);
+	ADD_METHOD(get_AudioChannelCount);
+	ADD_METHOD(get_ColorDepth);
+	ADD_METHOD(get_Gamma);
+	ADD_METHOD(set_Gamma);
+	ADD_METHOD(get_HardwareAcceleration);
+	ADD_METHOD(get_NumLock);
+	ADD_METHOD(get_OperatingSystem);
+	ADD_METHOD(get_ScreenHeight);
+	ADD_METHOD(get_ScreenWidth);
+	ADD_METHOD(get_ScrollLock);
+	ADD_METHOD(get_SupportsGammaControl);
+	ADD_METHOD(get_Version);
+	ADD_METHOD(get_ViewportHeight);
+	ADD_METHOD(get_ViewportWidth);
+	ADD_METHOD(get_Volume);
+	ADD_METHOD(set_Volume);
+	ADD_METHOD(get_VSync);
+	ADD_METHOD(set_VSync);
+	ADD_METHOD(get_Windowed);
+	#undef ADD_METHOD
+	#undef ADD_MEMBER
+	
+	lua_settop(L,IDX_LIB);
+	return 1;
+};
+
+// Object Lua wrappers
+#define OBJECT_UV_META lua_upvalueindex(1)
+#define OBJECT_UV_STORE lua_upvalueindex(2)
+static int luags_Object_Animate(lua_State *L) {
+	AGS_Object* self = luags_checkObject(L, 1, OBJECT_UV_META);
+	lua_pushinteger(L, AGS_Object_Animate(self, (int)luaL_checkint(L,2), (int)luaL_checkint(L,3), (int)luaL_optint(L,4,AGS_eOnce), (int)luaL_optint(L,5,AGS_eBlock), (int)luaL_optint(L,6,AGS_eForwards)));
+	return 1;
+};
+static int luags_Object_GetAtScreenXY(lua_State *L) {
+	luags_pushObject(L, AGS_Object_GetAtScreenXY((int)luaL_checkint(L,1), (int)luaL_checkint(L,2)), OBJECT_UV_META, OBJECT_UV_STORE);
+	return 1;
+};
+static int luags_Object_GetProperty(lua_State *L) {
+	AGS_Object* self = luags_checkObject(L, 1, OBJECT_UV_META);
+	lua_pushinteger(L, AGS_Object_GetProperty(self, luaL_checkstring(L,2)));
+	return 1;
+};
+static int luags_Object_GetTextProperty(lua_State *L) {
+	AGS_Object* self = luags_checkObject(L, 1, OBJECT_UV_META);
+	lua_pushstring(L, AGS_Object_GetTextProperty(self, luaL_checkstring(L,2)));
+	return 1;
+};
+static int luags_Object_IsCollidingWithObject(lua_State *L) {
+	AGS_Object* self = luags_checkObject(L, 1, OBJECT_UV_META);
+	lua_pushboolean(L, AGS_Object_IsCollidingWithObject(self, luags_checkObject(L,2, OBJECT_UV_META)));
+	return 1;
+};
+static int luags_Object_MergeIntoBackground(lua_State *L) {
+	AGS_Object* self = luags_checkObject(L, 1, OBJECT_UV_META);
+	lua_pushinteger(L, AGS_Object_MergeIntoBackground(self));
+	return 1;
+};
+static int luags_Object_Move(lua_State *L) {
+	AGS_Object* self = luags_checkObject(L, 1, OBJECT_UV_META);
+	lua_pushinteger(L, AGS_Object_Move(self, (int)luaL_checkint(L,2), (int)luaL_checkint(L,3), (int)luaL_checkint(L,4), (int)luaL_optint(L,5,AGS_eNoBlock), (int)luaL_optint(L,6,AGS_eWalkableAreas)));
+	return 1;
+};
+static int luags_Object_RemoveTint(lua_State *L) {
+	AGS_Object* self = luags_checkObject(L, 1, OBJECT_UV_META);
+	lua_pushinteger(L, AGS_Object_RemoveTint(self));
+	return 1;
+};
+static int luags_Object_RunInteraction(lua_State *L) {
+	AGS_Object* self = luags_checkObject(L, 1, OBJECT_UV_META);
+	lua_pushinteger(L, AGS_Object_RunInteraction(self, luags_checkCursorMode(L,2)));
+	return 1;
+};
+static int luags_Object_SetPosition(lua_State *L) {
+	AGS_Object* self = luags_checkObject(L, 1, OBJECT_UV_META);
+	lua_pushinteger(L, AGS_Object_SetPosition(self, (int)luaL_checkint(L,2), (int)luaL_checkint(L,3)));
+	return 1;
+};
+static int luags_Object_SetView(lua_State *L) {
+	AGS_Object* self = luags_checkObject(L, 1, OBJECT_UV_META);
+	lua_pushinteger(L, AGS_Object_SetView(self, (int)luaL_checkint(L,2), (int)luaL_optint(L,3,-1), (int)luaL_optint(L,4,-1)));
+	return 1;
+};
+static int luags_Object_StopAnimating(lua_State *L) {
+	AGS_Object* self = luags_checkObject(L, 1, OBJECT_UV_META);
+	lua_pushinteger(L, AGS_Object_StopAnimating(self));
+	return 1;
+};
+static int luags_Object_StopMoving(lua_State *L) {
+	AGS_Object* self = luags_checkObject(L, 1, OBJECT_UV_META);
+	lua_pushinteger(L, AGS_Object_StopMoving(self));
+	return 1;
+};
+static int luags_Object_Tint(lua_State *L) {
+	AGS_Object* self = luags_checkObject(L, 1, OBJECT_UV_META);
+	lua_pushinteger(L, AGS_Object_Tint(self, (int)luaL_checkint(L,2), (int)luaL_checkint(L,3), (int)luaL_checkint(L,4), (int)luaL_checkint(L,5), (int)luaL_checkint(L,6)));
+	return 1;
+};
+static int luags_Object_get_Animating(lua_State *L) {
+	AGS_Object* self = luags_checkObject(L, 1, OBJECT_UV_META);
+	lua_pushboolean(L, AGS_Object_get_Animating(self));
+	return 1;
+};
+static int luags_Object_get_Baseline(lua_State *L) {
+	AGS_Object* self = luags_checkObject(L, 1, OBJECT_UV_META);
+	lua_pushinteger(L, AGS_Object_get_Baseline(self));
+	return 1;
+};
+static int luags_Object_set_Baseline(lua_State *L) {
+	AGS_Object* self = luags_checkObject(L, 1, OBJECT_UV_META);
+	AGS_Object_set_Baseline(self, (int)luaL_checkint(L,2));
+	return 0;
+};
+static int luags_Object_get_BlockingHeight(lua_State *L) {
+	AGS_Object* self = luags_checkObject(L, 1, OBJECT_UV_META);
+	lua_pushinteger(L, AGS_Object_get_BlockingHeight(self));
+	return 1;
+};
+static int luags_Object_set_BlockingHeight(lua_State *L) {
+	AGS_Object* self = luags_checkObject(L, 1, OBJECT_UV_META);
+	AGS_Object_set_BlockingHeight(self, (int)luaL_checkint(L,2));
+	return 0;
+};
+static int luags_Object_get_BlockingWidth(lua_State *L) {
+	AGS_Object* self = luags_checkObject(L, 1, OBJECT_UV_META);
+	lua_pushinteger(L, AGS_Object_get_BlockingWidth(self));
+	return 1;
+};
+static int luags_Object_set_BlockingWidth(lua_State *L) {
+	AGS_Object* self = luags_checkObject(L, 1, OBJECT_UV_META);
+	AGS_Object_set_BlockingWidth(self, (int)luaL_checkint(L,2));
+	return 0;
+};
+static int luags_Object_get_Clickable(lua_State *L) {
+	AGS_Object* self = luags_checkObject(L, 1, OBJECT_UV_META);
+	lua_pushboolean(L, AGS_Object_get_Clickable(self));
+	return 1;
+};
+static int luags_Object_set_Clickable(lua_State *L) {
+	AGS_Object* self = luags_checkObject(L, 1, OBJECT_UV_META);
+	AGS_Object_set_Clickable(self, llh_checkboolean(L,2));
+	return 0;
+};
+static int luags_Object_get_Frame(lua_State *L) {
+	AGS_Object* self = luags_checkObject(L, 1, OBJECT_UV_META);
+	lua_pushinteger(L, AGS_Object_get_Frame(self));
+	return 1;
+};
+static int luags_Object_get_Graphic(lua_State *L) {
+	AGS_Object* self = luags_checkObject(L, 1, OBJECT_UV_META);
+	lua_pushinteger(L, AGS_Object_get_Graphic(self));
+	return 1;
+};
+static int luags_Object_set_Graphic(lua_State *L) {
+	AGS_Object* self = luags_checkObject(L, 1, OBJECT_UV_META);
+	AGS_Object_set_Graphic(self, (int)luaL_checkint(L,2));
+	return 0;
+};
+static int luags_Object_get_ID(lua_State *L) {
+	AGS_Object* self = luags_checkObject(L, 1, OBJECT_UV_META);
+	lua_pushinteger(L, AGS_Object_get_ID(self));
+	return 1;
+};
+static int luags_Object_get_IgnoreScaling(lua_State *L) {
+	AGS_Object* self = luags_checkObject(L, 1, OBJECT_UV_META);
+	lua_pushboolean(L, AGS_Object_get_IgnoreScaling(self));
+	return 1;
+};
+static int luags_Object_set_IgnoreScaling(lua_State *L) {
+	AGS_Object* self = luags_checkObject(L, 1, OBJECT_UV_META);
+	AGS_Object_set_IgnoreScaling(self, llh_checkboolean(L,2));
+	return 0;
+};
+static int luags_Object_get_IgnoreWalkbehinds(lua_State *L) {
+	AGS_Object* self = luags_checkObject(L, 1, OBJECT_UV_META);
+	lua_pushboolean(L, AGS_Object_get_IgnoreWalkbehinds(self));
+	return 1;
+};
+static int luags_Object_set_IgnoreWalkbehinds(lua_State *L) {
+	AGS_Object* self = luags_checkObject(L, 1, OBJECT_UV_META);
+	AGS_Object_set_IgnoreWalkbehinds(self, llh_checkboolean(L,2));
+	return 0;
+};
+static int luags_Object_get_Loop(lua_State *L) {
+	AGS_Object* self = luags_checkObject(L, 1, OBJECT_UV_META);
+	lua_pushinteger(L, AGS_Object_get_Loop(self));
+	return 1;
+};
+static int luags_Object_get_Moving(lua_State *L) {
+	AGS_Object* self = luags_checkObject(L, 1, OBJECT_UV_META);
+	lua_pushboolean(L, AGS_Object_get_Moving(self));
+	return 1;
+};
+static int luags_Object_get_Name(lua_State *L) {
+	AGS_Object* self = luags_checkObject(L, 1, OBJECT_UV_META);
+	lua_pushstring(L, AGS_Object_get_Name(self));
+	return 1;
+};
+static int luags_Object_get_Solid(lua_State *L) {
+	AGS_Object* self = luags_checkObject(L, 1, OBJECT_UV_META);
+	lua_pushboolean(L, AGS_Object_get_Solid(self));
+	return 1;
+};
+static int luags_Object_set_Solid(lua_State *L) {
+	AGS_Object* self = luags_checkObject(L, 1, OBJECT_UV_META);
+	AGS_Object_set_Solid(self, llh_checkboolean(L,2));
+	return 0;
+};
+static int luags_Object_get_Transparency(lua_State *L) {
+	AGS_Object* self = luags_checkObject(L, 1, OBJECT_UV_META);
+	lua_pushinteger(L, AGS_Object_get_Transparency(self));
+	return 1;
+};
+static int luags_Object_set_Transparency(lua_State *L) {
+	AGS_Object* self = luags_checkObject(L, 1, OBJECT_UV_META);
+	AGS_Object_set_Transparency(self, (int)luaL_checkint(L,2));
+	return 0;
+};
+static int luags_Object_get_View(lua_State *L) {
+	AGS_Object* self = luags_checkObject(L, 1, OBJECT_UV_META);
+	lua_pushinteger(L, AGS_Object_get_View(self));
+	return 1;
+};
+static int luags_Object_get_Visible(lua_State *L) {
+	AGS_Object* self = luags_checkObject(L, 1, OBJECT_UV_META);
+	lua_pushboolean(L, AGS_Object_get_Visible(self));
+	return 1;
+};
+static int luags_Object_set_Visible(lua_State *L) {
+	AGS_Object* self = luags_checkObject(L, 1, OBJECT_UV_META);
+	AGS_Object_set_Visible(self, llh_checkboolean(L,2));
+	return 0;
+};
+static int luags_Object_get_X(lua_State *L) {
+	AGS_Object* self = luags_checkObject(L, 1, OBJECT_UV_META);
+	lua_pushinteger(L, AGS_Object_get_X(self));
+	return 1;
+};
+static int luags_Object_set_X(lua_State *L) {
+	AGS_Object* self = luags_checkObject(L, 1, OBJECT_UV_META);
+	AGS_Object_set_X(self, (int)luaL_checkint(L,2));
+	return 0;
+};
+static int luags_Object_get_Y(lua_State *L) {
+	AGS_Object* self = luags_checkObject(L, 1, OBJECT_UV_META);
+	lua_pushinteger(L, AGS_Object_get_Y(self));
+	return 1;
+};
+static int luags_Object_set_Y(lua_State *L) {
+	AGS_Object* self = luags_checkObject(L, 1, OBJECT_UV_META);
+	AGS_Object_set_Y(self, (int)luaL_checkint(L,2));
+	return 0;
+};
+#undef OBJECT_UV_META
+#undef OBJECT_UV_STORE
+
+int luaopen_ags_Object(lua_State *L) {
+	int IDX_LIB, IDX_LIB_META;
+	int IDX_OBJECT_META;
+	int IDX_OBJECT_STORE;
+	luaL_register(L, "ags.Object", llh_null_lib);
+	IDX_LIB = lua_gettop(L);
+	lua_createtable(L,0,2);
+	IDX_LIB_META = lua_gettop(L);
+	lua_pushvalue(L,IDX_LIB_META);
+	lua_setmetatable(L,IDX_LIB);
+	luaL_newmetatable(L, "AGS_Object*");
+	IDX_OBJECT_META = lua_gettop(L);
+	luaL_newmetatable(L, "AGS_Object* store");
+	IDX_OBJECT_STORE = lua_gettop(L);
+	lua_getglobal(L, "agsinternal");
+	lua_getfield(L, -1, "initlib");
+	lua_pushvalue(L, IDX_LIB);
+	lua_pushvalue(L, IDX_LIB_META);
+	lua_pushvalue(L, IDX_OBJECT_META);
+	lua_pushboolean(L, 1);
+	lua_call(L,4,0);
+	lua_pop(L,1); // agsinternal
+	lua_pushvalue(L, IDX_OBJECT_STORE);
+	lua_setfield(L, IDX_OBJECT_META, "__store");
+	lua_getfield(L, LUA_REGISTRYINDEX, "agsinternal");
+	lua_getfield(L, -1, "persistroomthing");
+	lua_setfield(L, IDX_OBJECT_META, "__persist");
+	lua_pop(L,1);
+	
+	#define ADD_MEMBER(name,f) { \
+		lua_pushliteral(L, #name); \
+		lua_pushvalue(L, IDX_OBJECT_META); \
+		lua_pushvalue(L, IDX_OBJECT_STORE); \
+		lua_pushcclosure(L, f, 2); \
+		lua_rawset(L, IDX_LIB); \
+	}
+	#define ADD_METHOD(name) { if (AGS_Object_##name) { ADD_MEMBER(name, luags_Object_##name); } }
+	ADD_METHOD(Animate);
+	ADD_METHOD(GetAtScreenXY);
+	ADD_METHOD(GetProperty);
+	ADD_METHOD(GetTextProperty);
+	ADD_METHOD(IsCollidingWithObject);
+	ADD_METHOD(MergeIntoBackground);
+	ADD_METHOD(Move);
+	ADD_METHOD(RemoveTint);
+	ADD_METHOD(RunInteraction);
+	ADD_METHOD(SetPosition);
+	ADD_METHOD(SetView);
+	ADD_METHOD(StopAnimating);
+	ADD_METHOD(StopMoving);
+	ADD_METHOD(Tint);
+	ADD_METHOD(get_Animating);
+	ADD_METHOD(get_Baseline);
+	ADD_METHOD(set_Baseline);
+	ADD_METHOD(get_BlockingHeight);
+	ADD_METHOD(set_BlockingHeight);
+	ADD_METHOD(get_BlockingWidth);
+	ADD_METHOD(set_BlockingWidth);
+	ADD_METHOD(get_Clickable);
+	ADD_METHOD(set_Clickable);
+	ADD_METHOD(get_Frame);
+	ADD_METHOD(get_Graphic);
+	ADD_METHOD(set_Graphic);
+	ADD_METHOD(get_ID);
+	ADD_METHOD(get_IgnoreScaling);
+	ADD_METHOD(set_IgnoreScaling);
+	ADD_METHOD(get_IgnoreWalkbehinds);
+	ADD_METHOD(set_IgnoreWalkbehinds);
+	ADD_METHOD(get_Loop);
+	ADD_METHOD(get_Moving);
+	ADD_METHOD(get_Name);
+	ADD_METHOD(get_Solid);
+	ADD_METHOD(set_Solid);
+	ADD_METHOD(get_Transparency);
+	ADD_METHOD(set_Transparency);
+	ADD_METHOD(get_View);
+	ADD_METHOD(get_Visible);
+	ADD_METHOD(set_Visible);
+	ADD_METHOD(get_X);
+	ADD_METHOD(set_X);
+	ADD_METHOD(get_Y);
+	ADD_METHOD(set_Y);
+	#undef ADD_METHOD
+	#undef ADD_MEMBER
+	
+	lua_settop(L,IDX_LIB);
+	return 1;
+};
+
+// Character Lua wrappers
+#define CHARACTER_UV_OVERLAY_META lua_upvalueindex(1)
+#define CHARACTER_UV_OVERLAY_STORE lua_upvalueindex(2)
+#define CHARACTER_UV_META lua_upvalueindex(3)
+#define CHARACTER_UV_STORE lua_upvalueindex(4)
+#define CHARACTER_UV_OBJECT_META lua_upvalueindex(5)
+#define CHARACTER_UV_OBJECT_STORE lua_upvalueindex(6)
+#define CHARACTER_UV_INVENTORYITEM_META lua_upvalueindex(7)
+#define CHARACTER_UV_INVENTORYITEM_STORE lua_upvalueindex(8)
+static int luags_Character_AddInventory(lua_State *L) {
+	AGS_Character* self = luags_checkCharacter(L, 1, CHARACTER_UV_META);
+	lua_pushinteger(L, AGS_Character_AddInventory(self, luags_checkInventoryItem(L,2, CHARACTER_UV_INVENTORYITEM_META), (int)luaL_optint(L,3,AGS_SCR_NO_VALUE)));
+	return 1;
+};
+static int luags_Character_AddWaypoint(lua_State *L) {
+	AGS_Character* self = luags_checkCharacter(L, 1, CHARACTER_UV_META);
+	lua_pushinteger(L, AGS_Character_AddWaypoint(self, (int)luaL_checkint(L,2), (int)luaL_checkint(L,3)));
+	return 1;
+};
+static int luags_Character_Animate(lua_State *L) {
+	AGS_Character* self = luags_checkCharacter(L, 1, CHARACTER_UV_META);
+	lua_pushinteger(L, AGS_Character_Animate(self, (int)luaL_checkint(L,2), (int)luaL_checkint(L,3), (int)luaL_optint(L,4,AGS_eOnce), (int)luaL_optint(L,5,AGS_eBlock), (int)luaL_optint(L,6,AGS_eForwards)));
+	return 1;
+};
+static int luags_Character_ChangeRoom(lua_State *L) {
+	AGS_Character* self = luags_checkCharacter(L, 1, CHARACTER_UV_META);
+	lua_pushinteger(L, AGS_Character_ChangeRoom(self, (int)luaL_checkint(L,2), (int)luaL_optint(L,3,AGS_SCR_NO_VALUE), (int)luaL_optint(L,4,AGS_SCR_NO_VALUE)));
+	return 1;
+};
+static int luags_Character_ChangeRoomAutoPosition(lua_State *L) {
+	AGS_Character* self = luags_checkCharacter(L, 1, CHARACTER_UV_META);
+	lua_pushinteger(L, AGS_Character_ChangeRoomAutoPosition(self, (int)luaL_checkint(L,2), (int)luaL_optint(L,3,0)));
+	return 1;
+};
+static int luags_Character_ChangeView(lua_State *L) {
+	AGS_Character* self = luags_checkCharacter(L, 1, CHARACTER_UV_META);
+	lua_pushinteger(L, AGS_Character_ChangeView(self, (int)luaL_checkint(L,2)));
+	return 1;
+};
+static int luags_Character_FaceCharacter(lua_State *L) {
+	AGS_Character* self = luags_checkCharacter(L, 1, CHARACTER_UV_META);
+	lua_pushinteger(L, AGS_Character_FaceCharacter(self, luags_checkCharacter(L,2, CHARACTER_UV_META), (int)luaL_optint(L,3,AGS_eBlock)));
+	return 1;
+};
+static int luags_Character_FaceLocation(lua_State *L) {
+	AGS_Character* self = luags_checkCharacter(L, 1, CHARACTER_UV_META);
+	lua_pushinteger(L, AGS_Character_FaceLocation(self, (int)luaL_checkint(L,2), (int)luaL_checkint(L,3), (int)luaL_optint(L,4,AGS_eBlock)));
+	return 1;
+};
+static int luags_Character_FaceObject(lua_State *L) {
+	AGS_Character* self = luags_checkCharacter(L, 1, CHARACTER_UV_META);
+	lua_pushinteger(L, AGS_Character_FaceObject(self, luags_checkObject(L,2, CHARACTER_UV_OBJECT_META), (int)luaL_optint(L,3,AGS_eBlock)));
+	return 1;
+};
+static int luags_Character_FollowCharacter(lua_State *L) {
+	AGS_Character* self = luags_checkCharacter(L, 1, CHARACTER_UV_META);
+	lua_pushinteger(L, AGS_Character_FollowCharacter(self, luags_checkCharacter(L,2, CHARACTER_UV_META), (int)luaL_optint(L,3,10), (int)luaL_optint(L,4,97)));
+	return 1;
+};
+static int luags_Character_GetAtScreenXY(lua_State *L) {
+	luags_pushCharacter(L, AGS_Character_GetAtScreenXY((int)luaL_checkint(L,1), (int)luaL_checkint(L,2)), CHARACTER_UV_META, CHARACTER_UV_STORE);
+	return 1;
+};
+static int luags_Character_GetProperty(lua_State *L) {
+	AGS_Character* self = luags_checkCharacter(L, 1, CHARACTER_UV_META);
+	lua_pushinteger(L, AGS_Character_GetProperty(self, luaL_checkstring(L,2)));
+	return 1;
+};
+static int luags_Character_GetTextProperty(lua_State *L) {
+	AGS_Character* self = luags_checkCharacter(L, 1, CHARACTER_UV_META);
+	lua_pushstring(L, AGS_Character_GetTextProperty(self, luaL_checkstring(L,2)));
+	return 1;
+};
+static int luags_Character_HasInventory(lua_State *L) {
+	AGS_Character* self = luags_checkCharacter(L, 1, CHARACTER_UV_META);
+	lua_pushboolean(L, AGS_Character_HasInventory(self, luags_checkInventoryItem(L,2, CHARACTER_UV_INVENTORYITEM_META)));
+	return 1;
+};
+static int luags_Character_IsCollidingWithChar(lua_State *L) {
+	AGS_Character* self = luags_checkCharacter(L, 1, CHARACTER_UV_META);
+	lua_pushinteger(L, AGS_Character_IsCollidingWithChar(self, luags_checkCharacter(L,2, CHARACTER_UV_META)));
+	return 1;
+};
+static int luags_Character_IsCollidingWithObject(lua_State *L) {
+	AGS_Character* self = luags_checkCharacter(L, 1, CHARACTER_UV_META);
+	lua_pushinteger(L, AGS_Character_IsCollidingWithObject(self, luags_checkObject(L,2, CHARACTER_UV_OBJECT_META)));
+	return 1;
+};
+static int luags_Character_LockView(lua_State *L) {
+	AGS_Character* self = luags_checkCharacter(L, 1, CHARACTER_UV_META);
+	lua_pushinteger(L, AGS_Character_LockView(self, (int)luaL_checkint(L,2)));
+	return 1;
+};
+static int luags_Character_LockViewAligned(lua_State *L) {
+	AGS_Character* self = luags_checkCharacter(L, 1, CHARACTER_UV_META);
+	lua_pushinteger(L, AGS_Character_LockViewAligned(self, (int)luaL_checkint(L,2), (int)luaL_checkint(L,3), luags_checkAlignment(L,4)));
+	return 1;
+};
+static int luags_Character_LockViewFrame(lua_State *L) {
+	AGS_Character* self = luags_checkCharacter(L, 1, CHARACTER_UV_META);
+	lua_pushinteger(L, AGS_Character_LockViewFrame(self, (int)luaL_checkint(L,2), (int)luaL_checkint(L,3), (int)luaL_checkint(L,4)));
+	return 1;
+};
+static int luags_Character_LockViewOffset(lua_State *L) {
+	AGS_Character* self = luags_checkCharacter(L, 1, CHARACTER_UV_META);
+	lua_pushinteger(L, AGS_Character_LockViewOffset(self, (int)luaL_checkint(L,2), (int)luaL_checkint(L,3), (int)luaL_checkint(L,4)));
+	return 1;
+};
+static int luags_Character_LoseInventory(lua_State *L) {
+	AGS_Character* self = luags_checkCharacter(L, 1, CHARACTER_UV_META);
+	lua_pushinteger(L, AGS_Character_LoseInventory(self, luags_checkInventoryItem(L,2, CHARACTER_UV_INVENTORYITEM_META)));
+	return 1;
+};
+static int luags_Character_Move(lua_State *L) {
+	AGS_Character* self = luags_checkCharacter(L, 1, CHARACTER_UV_META);
+	lua_pushinteger(L, AGS_Character_Move(self, (int)luaL_checkint(L,2), (int)luaL_checkint(L,3), (int)luaL_optint(L,4,AGS_eNoBlock), (int)luaL_optint(L,5,AGS_eWalkableAreas)));
+	return 1;
+};
+static int luags_Character_PlaceOnWalkableArea(lua_State *L) {
+	AGS_Character* self = luags_checkCharacter(L, 1, CHARACTER_UV_META);
+	lua_pushinteger(L, AGS_Character_PlaceOnWalkableArea(self));
+	return 1;
+};
+static int luags_Character_RemoveTint(lua_State *L) {
+	AGS_Character* self = luags_checkCharacter(L, 1, CHARACTER_UV_META);
+	AGS_Character_RemoveTint(self);
+	return 0;
+};
+static int luags_Character_RunInteraction(lua_State *L) {
+	AGS_Character* self = luags_checkCharacter(L, 1, CHARACTER_UV_META);
+	lua_pushinteger(L, AGS_Character_RunInteraction(self, luags_checkCursorMode(L,2)));
+	return 1;
+};
+static int luags_Character_Say(lua_State *L) {
+	AGS_Character* self = luags_checkCharacter(L, 1, CHARACTER_UV_META);
+	aux_formatstring(L, 2);
+	lua_pushinteger(L, AGS_Character_Say(self, lua_tostring(L,2)));
+	return 1;
+};
+static int luags_Character_SayAt(lua_State *L) {
+	AGS_Character* self = luags_checkCharacter(L, 1, CHARACTER_UV_META);
+	lua_pushinteger(L, AGS_Character_SayAt(self, (int)luaL_checkint(L,2), (int)luaL_checkint(L,3), (int)luaL_checkint(L,4), luaL_checkstring(L,5)));
+	return 1;
+};
+static int luags_Character_SayBackground(lua_State *L) {
+	AGS_Character* self = luags_checkCharacter(L, 1, CHARACTER_UV_META);
+	luags_pushOverlay(L, AGS_Character_SayBackground(self, luaL_checkstring(L,2)), CHARACTER_UV_OVERLAY_META, CHARACTER_UV_OVERLAY_STORE);
+	return 1;
+};
+static int luags_Character_SetAsPlayer(lua_State *L) {
+	AGS_Character* self = luags_checkCharacter(L, 1, CHARACTER_UV_META);
+	lua_pushinteger(L, AGS_Character_SetAsPlayer(self));
+	return 1;
+};
+static int luags_Character_SetIdleView(lua_State *L) {
+	AGS_Character* self = luags_checkCharacter(L, 1, CHARACTER_UV_META);
+	lua_pushinteger(L, AGS_Character_SetIdleView(self, (int)luaL_checkint(L,2), (int)luaL_checkint(L,3)));
+	return 1;
+};
+static int luags_Character_SetWalkSpeed(lua_State *L) {
+	AGS_Character* self = luags_checkCharacter(L, 1, CHARACTER_UV_META);
+	lua_pushinteger(L, AGS_Character_SetWalkSpeed(self, (int)luaL_checkint(L,2), (int)luaL_checkint(L,3)));
+	return 1;
+};
+static int luags_Character_StopMoving(lua_State *L) {
+	AGS_Character* self = luags_checkCharacter(L, 1, CHARACTER_UV_META);
+	lua_pushinteger(L, AGS_Character_StopMoving(self));
+	return 1;
+};
+static int luags_Character_Think(lua_State *L) {
+	AGS_Character* self = luags_checkCharacter(L, 1, CHARACTER_UV_META);
+	aux_formatstring(L, 2);
+	lua_pushinteger(L, AGS_Character_Think(self, lua_tostring(L,2)));
+	return 1;
+};
+static int luags_Character_Tint(lua_State *L) {
+	AGS_Character* self = luags_checkCharacter(L, 1, CHARACTER_UV_META);
+	AGS_Character_Tint(self, (int)luaL_checkint(L,2), (int)luaL_checkint(L,3), (int)luaL_checkint(L,4), (int)luaL_checkint(L,5), (int)luaL_checkint(L,6));
+	return 0;
+};
+static int luags_Character_UnlockView(lua_State *L) {
+	AGS_Character* self = luags_checkCharacter(L, 1, CHARACTER_UV_META);
+	lua_pushinteger(L, AGS_Character_UnlockView(self));
+	return 1;
+};
+static int luags_Character_Walk(lua_State *L) {
+	AGS_Character* self = luags_checkCharacter(L, 1, CHARACTER_UV_META);
+	lua_pushinteger(L, AGS_Character_Walk(self, (int)luaL_checkint(L,2), (int)luaL_checkint(L,3), (int)luaL_optint(L,4,AGS_eNoBlock), (int)luaL_optint(L,5,AGS_eWalkableAreas)));
+	return 1;
+};
+static int luags_Character_WalkStraight(lua_State *L) {
+	AGS_Character* self = luags_checkCharacter(L, 1, CHARACTER_UV_META);
+	lua_pushinteger(L, AGS_Character_WalkStraight(self, (int)luaL_checkint(L,2), (int)luaL_checkint(L,3), (int)luaL_optint(L,4,AGS_eNoBlock)));
+	return 1;
+};
+static int luags_Character_get_ActiveInventory(lua_State *L) {
+	AGS_Character* self = luags_checkCharacter(L, 1, CHARACTER_UV_META);
+	luags_pushInventoryItem(L, AGS_Character_get_ActiveInventory(self), CHARACTER_UV_INVENTORYITEM_META, CHARACTER_UV_INVENTORYITEM_STORE);
+	return 1;
+};
+static int luags_Character_set_ActiveInventory(lua_State *L) {
+	AGS_Character* self = luags_checkCharacter(L, 1, CHARACTER_UV_META);
+	AGS_Character_set_ActiveInventory(self, luags_checkInventoryItem(L,2, CHARACTER_UV_INVENTORYITEM_META));
+	return 0;
+};
+static int luags_Character_get_Animating(lua_State *L) {
+	AGS_Character* self = luags_checkCharacter(L, 1, CHARACTER_UV_META);
+	lua_pushboolean(L, AGS_Character_get_Animating(self));
+	return 1;
+};
+static int luags_Character_get_AnimationSpeed(lua_State *L) {
+	AGS_Character* self = luags_checkCharacter(L, 1, CHARACTER_UV_META);
+	lua_pushinteger(L, AGS_Character_get_AnimationSpeed(self));
+	return 1;
+};
+static int luags_Character_set_AnimationSpeed(lua_State *L) {
+	AGS_Character* self = luags_checkCharacter(L, 1, CHARACTER_UV_META);
+	AGS_Character_set_AnimationSpeed(self, (int)luaL_checkint(L,2));
+	return 0;
+};
+static int luags_Character_get_Baseline(lua_State *L) {
+	AGS_Character* self = luags_checkCharacter(L, 1, CHARACTER_UV_META);
+	lua_pushinteger(L, AGS_Character_get_Baseline(self));
+	return 1;
+};
+static int luags_Character_set_Baseline(lua_State *L) {
+	AGS_Character* self = luags_checkCharacter(L, 1, CHARACTER_UV_META);
+	AGS_Character_set_Baseline(self, (int)luaL_checkint(L,2));
+	return 0;
+};
+static int luags_Character_get_BlinkInterval(lua_State *L) {
+	AGS_Character* self = luags_checkCharacter(L, 1, CHARACTER_UV_META);
+	lua_pushinteger(L, AGS_Character_get_BlinkInterval(self));
+	return 1;
+};
+static int luags_Character_set_BlinkInterval(lua_State *L) {
+	AGS_Character* self = luags_checkCharacter(L, 1, CHARACTER_UV_META);
+	AGS_Character_set_BlinkInterval(self, (int)luaL_checkint(L,2));
+	return 0;
+};
+static int luags_Character_get_BlinkView(lua_State *L) {
+	AGS_Character* self = luags_checkCharacter(L, 1, CHARACTER_UV_META);
+	lua_pushinteger(L, AGS_Character_get_BlinkView(self));
+	return 1;
+};
+static int luags_Character_set_BlinkView(lua_State *L) {
+	AGS_Character* self = luags_checkCharacter(L, 1, CHARACTER_UV_META);
+	AGS_Character_set_BlinkView(self, (int)luaL_checkint(L,2));
+	return 0;
+};
+static int luags_Character_get_BlinkWhileThinking(lua_State *L) {
+	AGS_Character* self = luags_checkCharacter(L, 1, CHARACTER_UV_META);
+	lua_pushboolean(L, AGS_Character_get_BlinkWhileThinking(self));
+	return 1;
+};
+static int luags_Character_set_BlinkWhileThinking(lua_State *L) {
+	AGS_Character* self = luags_checkCharacter(L, 1, CHARACTER_UV_META);
+	AGS_Character_set_BlinkWhileThinking(self, llh_checkboolean(L,2));
+	return 0;
+};
+static int luags_Character_get_BlockingHeight(lua_State *L) {
+	AGS_Character* self = luags_checkCharacter(L, 1, CHARACTER_UV_META);
+	lua_pushinteger(L, AGS_Character_get_BlockingHeight(self));
+	return 1;
+};
+static int luags_Character_set_BlockingHeight(lua_State *L) {
+	AGS_Character* self = luags_checkCharacter(L, 1, CHARACTER_UV_META);
+	AGS_Character_set_BlockingHeight(self, (int)luaL_checkint(L,2));
+	return 0;
+};
+static int luags_Character_get_BlockingWidth(lua_State *L) {
+	AGS_Character* self = luags_checkCharacter(L, 1, CHARACTER_UV_META);
+	lua_pushinteger(L, AGS_Character_get_BlockingWidth(self));
+	return 1;
+};
+static int luags_Character_set_BlockingWidth(lua_State *L) {
+	AGS_Character* self = luags_checkCharacter(L, 1, CHARACTER_UV_META);
+	AGS_Character_set_BlockingWidth(self, (int)luaL_checkint(L,2));
+	return 0;
+};
+static int luags_Character_get_Clickable(lua_State *L) {
+	AGS_Character* self = luags_checkCharacter(L, 1, CHARACTER_UV_META);
+	lua_pushboolean(L, AGS_Character_get_Clickable(self));
+	return 1;
+};
+static int luags_Character_set_Clickable(lua_State *L) {
+	AGS_Character* self = luags_checkCharacter(L, 1, CHARACTER_UV_META);
+	AGS_Character_set_Clickable(self, llh_checkboolean(L,2));
+	return 0;
+};
+static int luags_Character_get_DiagonalLoops(lua_State *L) {
+	AGS_Character* self = luags_checkCharacter(L, 1, CHARACTER_UV_META);
+	lua_pushboolean(L, AGS_Character_get_DiagonalLoops(self));
+	return 1;
+};
+static int luags_Character_set_DiagonalLoops(lua_State *L) {
+	AGS_Character* self = luags_checkCharacter(L, 1, CHARACTER_UV_META);
+	AGS_Character_set_DiagonalLoops(self, llh_checkboolean(L,2));
+	return 0;
+};
+static int luags_Character_get_Frame(lua_State *L) {
+	AGS_Character* self = luags_checkCharacter(L, 1, CHARACTER_UV_META);
+	lua_pushinteger(L, AGS_Character_get_Frame(self));
+	return 1;
+};
+static int luags_Character_set_Frame(lua_State *L) {
+	AGS_Character* self = luags_checkCharacter(L, 1, CHARACTER_UV_META);
+	AGS_Character_set_Frame(self, (int)luaL_checkint(L,2));
+	return 0;
+};
+static int luags_Character_get_HasExplicitTint(lua_State *L) {
+	AGS_Character* self = luags_checkCharacter(L, 1, CHARACTER_UV_META);
+	lua_pushboolean(L, AGS_Character_get_HasExplicitTint(self));
+	return 1;
+};
+static int luags_Character_get_ID(lua_State *L) {
+	AGS_Character* self = luags_checkCharacter(L, 1, CHARACTER_UV_META);
+	lua_pushinteger(L, AGS_Character_get_ID(self));
+	return 1;
+};
+static int luags_Character_get_IdleView(lua_State *L) {
+	AGS_Character* self = luags_checkCharacter(L, 1, CHARACTER_UV_META);
+	lua_pushinteger(L, AGS_Character_get_IdleView(self));
+	return 1;
+};
+static int luags_Character_get_IgnoreLighting(lua_State *L) {
+	AGS_Character* self = luags_checkCharacter(L, 1, CHARACTER_UV_META);
+	lua_pushboolean(L, AGS_Character_get_IgnoreLighting(self));
+	return 1;
+};
+static int luags_Character_set_IgnoreLighting(lua_State *L) {
+	AGS_Character* self = luags_checkCharacter(L, 1, CHARACTER_UV_META);
+	AGS_Character_set_IgnoreLighting(self, llh_checkboolean(L,2));
+	return 0;
+};
+static int luags_Character_get_IgnoreScaling(lua_State *L) {
+	AGS_Character* self = luags_checkCharacter(L, 1, CHARACTER_UV_META);
+	lua_pushboolean(L, AGS_Character_get_IgnoreScaling(self));
+	return 1;
+};
+static int luags_Character_set_IgnoreScaling(lua_State *L) {
+	AGS_Character* self = luags_checkCharacter(L, 1, CHARACTER_UV_META);
+	AGS_Character_set_IgnoreScaling(self, llh_checkboolean(L,2));
+	return 0;
+};
+static int luags_Character_get_IgnoreWalkbehinds(lua_State *L) {
+	AGS_Character* self = luags_checkCharacter(L, 1, CHARACTER_UV_META);
+	lua_pushboolean(L, AGS_Character_get_IgnoreWalkbehinds(self));
+	return 1;
+};
+static int luags_Character_set_IgnoreWalkbehinds(lua_State *L) {
+	AGS_Character* self = luags_checkCharacter(L, 1, CHARACTER_UV_META);
+	AGS_Character_set_IgnoreWalkbehinds(self, llh_checkboolean(L,2));
+	return 0;
+};
+static int luags_Character_geti_InventoryQuantity(lua_State *L) {
+	AGS_Character* self = luags_checkCharacter(L, 1, CHARACTER_UV_META);
+	lua_pushinteger(L, AGS_Character_geti_InventoryQuantity(self, (int)luaL_checkint(L,2)));
+	return 1;
+};
+static int luags_Character_seti_InventoryQuantity(lua_State *L) {
+	AGS_Character* self = luags_checkCharacter(L, 1, CHARACTER_UV_META);
+	AGS_Character_seti_InventoryQuantity(self, (int)luaL_checkint(L,2), (int)luaL_checkint(L,3));
+	return 0;
+};
+static int luags_Character_get_Loop(lua_State *L) {
+	AGS_Character* self = luags_checkCharacter(L, 1, CHARACTER_UV_META);
+	lua_pushinteger(L, AGS_Character_get_Loop(self));
+	return 1;
+};
+static int luags_Character_set_Loop(lua_State *L) {
+	AGS_Character* self = luags_checkCharacter(L, 1, CHARACTER_UV_META);
+	AGS_Character_set_Loop(self, (int)luaL_checkint(L,2));
+	return 0;
+};
+static int luags_Character_get_ManualScaling(lua_State *L) {
+	AGS_Character* self = luags_checkCharacter(L, 1, CHARACTER_UV_META);
+	lua_pushboolean(L, AGS_Character_get_ManualScaling(self));
+	return 1;
+};
+static int luags_Character_set_ManualScaling(lua_State *L) {
+	AGS_Character* self = luags_checkCharacter(L, 1, CHARACTER_UV_META);
+	AGS_Character_set_ManualScaling(self, llh_checkboolean(L,2));
+	return 0;
+};
+static int luags_Character_get_MovementLinkedToAnimation(lua_State *L) {
+	AGS_Character* self = luags_checkCharacter(L, 1, CHARACTER_UV_META);
+	lua_pushboolean(L, AGS_Character_get_MovementLinkedToAnimation(self));
+	return 1;
+};
+static int luags_Character_set_MovementLinkedToAnimation(lua_State *L) {
+	AGS_Character* self = luags_checkCharacter(L, 1, CHARACTER_UV_META);
+	AGS_Character_set_MovementLinkedToAnimation(self, llh_checkboolean(L,2));
+	return 0;
+};
+static int luags_Character_get_Moving(lua_State *L) {
+	AGS_Character* self = luags_checkCharacter(L, 1, CHARACTER_UV_META);
+	lua_pushboolean(L, AGS_Character_get_Moving(self));
+	return 1;
+};
+static int luags_Character_get_Name(lua_State *L) {
+	AGS_Character* self = luags_checkCharacter(L, 1, CHARACTER_UV_META);
+	lua_pushstring(L, AGS_Character_get_Name(self));
+	return 1;
+};
+static int luags_Character_set_Name(lua_State *L) {
+	AGS_Character* self = luags_checkCharacter(L, 1, CHARACTER_UV_META);
+	AGS_Character_set_Name(self, luaL_checkstring(L,2));
+	return 0;
+};
+static int luags_Character_get_NormalView(lua_State *L) {
+	AGS_Character* self = luags_checkCharacter(L, 1, CHARACTER_UV_META);
+	lua_pushinteger(L, AGS_Character_get_NormalView(self));
+	return 1;
+};
+static int luags_Character_get_PreviousRoom(lua_State *L) {
+	AGS_Character* self = luags_checkCharacter(L, 1, CHARACTER_UV_META);
+	lua_pushinteger(L, AGS_Character_get_PreviousRoom(self));
+	return 1;
+};
+static int luags_Character_get_Room(lua_State *L) {
+	AGS_Character* self = luags_checkCharacter(L, 1, CHARACTER_UV_META);
+	lua_pushinteger(L, AGS_Character_get_Room(self));
+	return 1;
+};
+static int luags_Character_get_ScaleMoveSpeed(lua_State *L) {
+	AGS_Character* self = luags_checkCharacter(L, 1, CHARACTER_UV_META);
+	lua_pushboolean(L, AGS_Character_get_ScaleMoveSpeed(self));
+	return 1;
+};
+static int luags_Character_set_ScaleMoveSpeed(lua_State *L) {
+	AGS_Character* self = luags_checkCharacter(L, 1, CHARACTER_UV_META);
+	AGS_Character_set_ScaleMoveSpeed(self, llh_checkboolean(L,2));
+	return 0;
+};
+static int luags_Character_get_ScaleVolume(lua_State *L) {
+	AGS_Character* self = luags_checkCharacter(L, 1, CHARACTER_UV_META);
+	lua_pushboolean(L, AGS_Character_get_ScaleVolume(self));
+	return 1;
+};
+static int luags_Character_set_ScaleVolume(lua_State *L) {
+	AGS_Character* self = luags_checkCharacter(L, 1, CHARACTER_UV_META);
+	AGS_Character_set_ScaleVolume(self, llh_checkboolean(L,2));
+	return 0;
+};
+static int luags_Character_get_Scaling(lua_State *L) {
+	AGS_Character* self = luags_checkCharacter(L, 1, CHARACTER_UV_META);
+	lua_pushinteger(L, AGS_Character_get_Scaling(self));
+	return 1;
+};
+static int luags_Character_set_Scaling(lua_State *L) {
+	AGS_Character* self = luags_checkCharacter(L, 1, CHARACTER_UV_META);
+	AGS_Character_set_Scaling(self, (int)luaL_checkint(L,2));
+	return 0;
+};
+static int luags_Character_get_Solid(lua_State *L) {
+	AGS_Character* self = luags_checkCharacter(L, 1, CHARACTER_UV_META);
+	lua_pushboolean(L, AGS_Character_get_Solid(self));
+	return 1;
+};
+static int luags_Character_set_Solid(lua_State *L) {
+	AGS_Character* self = luags_checkCharacter(L, 1, CHARACTER_UV_META);
+	AGS_Character_set_Solid(self, llh_checkboolean(L,2));
+	return 0;
+};
+static int luags_Character_get_Speaking(lua_State *L) {
+	AGS_Character* self = luags_checkCharacter(L, 1, CHARACTER_UV_META);
+	lua_pushboolean(L, AGS_Character_get_Speaking(self));
+	return 1;
+};
+static int luags_Character_get_SpeakingFrame(lua_State *L) {
+	AGS_Character* self = luags_checkCharacter(L, 1, CHARACTER_UV_META);
+	lua_pushinteger(L, AGS_Character_get_SpeakingFrame(self));
+	return 1;
+};
+static int luags_Character_get_SpeechAnimationDelay(lua_State *L) {
+	AGS_Character* self = luags_checkCharacter(L, 1, CHARACTER_UV_META);
+	lua_pushinteger(L, AGS_Character_get_SpeechAnimationDelay(self));
+	return 1;
+};
+static int luags_Character_set_SpeechAnimationDelay(lua_State *L) {
+	AGS_Character* self = luags_checkCharacter(L, 1, CHARACTER_UV_META);
+	AGS_Character_set_SpeechAnimationDelay(self, (int)luaL_checkint(L,2));
+	return 0;
+};
+static int luags_Character_get_SpeechColor(lua_State *L) {
+	AGS_Character* self = luags_checkCharacter(L, 1, CHARACTER_UV_META);
+	lua_pushinteger(L, AGS_Character_get_SpeechColor(self));
+	return 1;
+};
+static int luags_Character_set_SpeechColor(lua_State *L) {
+	AGS_Character* self = luags_checkCharacter(L, 1, CHARACTER_UV_META);
+	AGS_Character_set_SpeechColor(self, (int)luaL_checkint(L,2));
+	return 0;
+};
+static int luags_Character_get_SpeechView(lua_State *L) {
+	AGS_Character* self = luags_checkCharacter(L, 1, CHARACTER_UV_META);
+	lua_pushinteger(L, AGS_Character_get_SpeechView(self));
+	return 1;
+};
+static int luags_Character_set_SpeechView(lua_State *L) {
+	AGS_Character* self = luags_checkCharacter(L, 1, CHARACTER_UV_META);
+	AGS_Character_set_SpeechView(self, (int)luaL_checkint(L,2));
+	return 0;
+};
+static int luags_Character_get_ThinkView(lua_State *L) {
+	AGS_Character* self = luags_checkCharacter(L, 1, CHARACTER_UV_META);
+	lua_pushinteger(L, AGS_Character_get_ThinkView(self));
+	return 1;
+};
+static int luags_Character_set_ThinkView(lua_State *L) {
+	AGS_Character* self = luags_checkCharacter(L, 1, CHARACTER_UV_META);
+	AGS_Character_set_ThinkView(self, (int)luaL_checkint(L,2));
+	return 0;
+};
+static int luags_Character_get_Transparency(lua_State *L) {
+	AGS_Character* self = luags_checkCharacter(L, 1, CHARACTER_UV_META);
+	lua_pushinteger(L, AGS_Character_get_Transparency(self));
+	return 1;
+};
+static int luags_Character_set_Transparency(lua_State *L) {
+	AGS_Character* self = luags_checkCharacter(L, 1, CHARACTER_UV_META);
+	AGS_Character_set_Transparency(self, (int)luaL_checkint(L,2));
+	return 0;
+};
+static int luags_Character_get_TurnBeforeWalking(lua_State *L) {
+	AGS_Character* self = luags_checkCharacter(L, 1, CHARACTER_UV_META);
+	lua_pushboolean(L, AGS_Character_get_TurnBeforeWalking(self));
+	return 1;
+};
+static int luags_Character_set_TurnBeforeWalking(lua_State *L) {
+	AGS_Character* self = luags_checkCharacter(L, 1, CHARACTER_UV_META);
+	AGS_Character_set_TurnBeforeWalking(self, llh_checkboolean(L,2));
+	return 0;
+};
+static int luags_Character_get_View(lua_State *L) {
+	AGS_Character* self = luags_checkCharacter(L, 1, CHARACTER_UV_META);
+	lua_pushinteger(L, AGS_Character_get_View(self));
+	return 1;
+};
+static int luags_Character_get_WalkSpeedX(lua_State *L) {
+	AGS_Character* self = luags_checkCharacter(L, 1, CHARACTER_UV_META);
+	lua_pushinteger(L, AGS_Character_get_WalkSpeedX(self));
+	return 1;
+};
+static int luags_Character_get_WalkSpeedY(lua_State *L) {
+	AGS_Character* self = luags_checkCharacter(L, 1, CHARACTER_UV_META);
+	lua_pushinteger(L, AGS_Character_get_WalkSpeedY(self));
+	return 1;
+};
+static int luags_Character_get_x(lua_State *L) {
+	AGS_Character* self = luags_checkCharacter(L, 1, CHARACTER_UV_META);
+	lua_pushinteger(L, AGS_Character_get_x(self));
+	return 1;
+};
+static int luags_Character_set_x(lua_State *L) {
+	AGS_Character* self = luags_checkCharacter(L, 1, CHARACTER_UV_META);
+	AGS_Character_set_x(self, (int)luaL_checkint(L,2));
+	return 0;
+};
+static int luags_Character_get_y(lua_State *L) {
+	AGS_Character* self = luags_checkCharacter(L, 1, CHARACTER_UV_META);
+	lua_pushinteger(L, AGS_Character_get_y(self));
+	return 1;
+};
+static int luags_Character_set_y(lua_State *L) {
+	AGS_Character* self = luags_checkCharacter(L, 1, CHARACTER_UV_META);
+	AGS_Character_set_y(self, (int)luaL_checkint(L,2));
+	return 0;
+};
+static int luags_Character_get_z(lua_State *L) {
+	AGS_Character* self = luags_checkCharacter(L, 1, CHARACTER_UV_META);
+	lua_pushinteger(L, AGS_Character_get_z(self));
+	return 1;
+};
+static int luags_Character_set_z(lua_State *L) {
+	AGS_Character* self = luags_checkCharacter(L, 1, CHARACTER_UV_META);
+	AGS_Character_set_z(self, (int)luaL_checkint(L,2));
+	return 0;
+};
+#undef CHARACTER_UV_OVERLAY_META
+#undef CHARACTER_UV_OVERLAY_STORE
+#undef CHARACTER_UV_META
+#undef CHARACTER_UV_STORE
+#undef CHARACTER_UV_OBJECT_META
+#undef CHARACTER_UV_OBJECT_STORE
+#undef CHARACTER_UV_INVENTORYITEM_META
+#undef CHARACTER_UV_INVENTORYITEM_STORE
+
+int luaopen_ags_Character(lua_State *L) {
+	int IDX_LIB, IDX_LIB_META;
+	int IDX_OVERLAY_META;
+	int IDX_OVERLAY_STORE;
+	int IDX_CHARACTER_META;
+	int IDX_CHARACTER_STORE;
+	int IDX_OBJECT_META;
+	int IDX_OBJECT_STORE;
+	int IDX_INVENTORYITEM_META;
+	int IDX_INVENTORYITEM_STORE;
+	luaL_register(L, "ags.Character", llh_null_lib);
+	IDX_LIB = lua_gettop(L);
+	lua_createtable(L,0,2);
+	IDX_LIB_META = lua_gettop(L);
+	lua_pushvalue(L,IDX_LIB_META);
+	lua_setmetatable(L,IDX_LIB);
+	luaL_newmetatable(L, "AGS_Overlay*");
+	IDX_OVERLAY_META = lua_gettop(L);
+	luaL_newmetatable(L, "AGS_Overlay* store");
+	IDX_OVERLAY_STORE = lua_gettop(L);
+	luaL_newmetatable(L, "AGS_Character*");
+	IDX_CHARACTER_META = lua_gettop(L);
+	luaL_newmetatable(L, IMMORTAL_OBJECT_STORE);
+	IDX_CHARACTER_STORE = lua_gettop(L);
+	luaL_newmetatable(L, "AGS_Object*");
+	IDX_OBJECT_META = lua_gettop(L);
+	luaL_newmetatable(L, "AGS_Object* store");
+	IDX_OBJECT_STORE = lua_gettop(L);
+	luaL_newmetatable(L, "AGS_InventoryItem*");
+	IDX_INVENTORYITEM_META = lua_gettop(L);
+	luaL_newmetatable(L, IMMORTAL_OBJECT_STORE);
+	IDX_INVENTORYITEM_STORE = lua_gettop(L);
+	lua_getglobal(L, "agsinternal");
+	lua_getfield(L, -1, "initlib");
+	lua_pushvalue(L, IDX_LIB);
+	lua_pushvalue(L, IDX_LIB_META);
+	lua_pushvalue(L, IDX_CHARACTER_META);
+	lua_pushboolean(L, 1);
+	lua_call(L,4,0);
+	lua_pop(L,1); // agsinternal
+	
+	#define ADD_MEMBER(name,f) { \
+		lua_pushliteral(L, #name); \
+		lua_pushvalue(L, IDX_OVERLAY_META); \
+		lua_pushvalue(L, IDX_OVERLAY_STORE); \
+		lua_pushvalue(L, IDX_CHARACTER_META); \
+		lua_pushvalue(L, IDX_CHARACTER_STORE); \
+		lua_pushvalue(L, IDX_OBJECT_META); \
+		lua_pushvalue(L, IDX_OBJECT_STORE); \
+		lua_pushvalue(L, IDX_INVENTORYITEM_META); \
+		lua_pushvalue(L, IDX_INVENTORYITEM_STORE); \
+		lua_pushcclosure(L, f, 8); \
+		lua_rawset(L, IDX_LIB); \
+	}
+	#define ADD_METHOD(name) { if (AGS_Character_##name) { ADD_MEMBER(name, luags_Character_##name); } }
+	ADD_METHOD(AddInventory);
+	ADD_METHOD(AddWaypoint);
+	ADD_METHOD(Animate);
+	ADD_METHOD(ChangeRoom);
+	ADD_METHOD(ChangeRoomAutoPosition);
+	ADD_METHOD(ChangeView);
+	ADD_METHOD(FaceCharacter);
+	ADD_METHOD(FaceLocation);
+	ADD_METHOD(FaceObject);
+	ADD_METHOD(FollowCharacter);
+	ADD_METHOD(GetAtScreenXY);
+	ADD_METHOD(GetProperty);
+	ADD_METHOD(GetTextProperty);
+	ADD_METHOD(HasInventory);
+	ADD_METHOD(IsCollidingWithChar);
+	ADD_METHOD(IsCollidingWithObject);
+	ADD_METHOD(LockView);
+	ADD_METHOD(LockViewAligned);
+	ADD_METHOD(LockViewFrame);
+	ADD_METHOD(LockViewOffset);
+	ADD_METHOD(LoseInventory);
+	ADD_METHOD(Move);
+	ADD_METHOD(PlaceOnWalkableArea);
+	ADD_METHOD(RemoveTint);
+	ADD_METHOD(RunInteraction);
+	ADD_METHOD(Say);
+	ADD_METHOD(SayAt);
+	ADD_METHOD(SayBackground);
+	ADD_METHOD(SetAsPlayer);
+	ADD_METHOD(SetIdleView);
+	ADD_METHOD(SetWalkSpeed);
+	ADD_METHOD(StopMoving);
+	ADD_METHOD(Think);
+	ADD_METHOD(Tint);
+	ADD_METHOD(UnlockView);
+	ADD_METHOD(Walk);
+	ADD_METHOD(WalkStraight);
+	ADD_METHOD(get_ActiveInventory);
+	ADD_METHOD(set_ActiveInventory);
+	ADD_METHOD(get_Animating);
+	ADD_METHOD(get_AnimationSpeed);
+	ADD_METHOD(set_AnimationSpeed);
+	ADD_METHOD(get_Baseline);
+	ADD_METHOD(set_Baseline);
+	ADD_METHOD(get_BlinkInterval);
+	ADD_METHOD(set_BlinkInterval);
+	ADD_METHOD(get_BlinkView);
+	ADD_METHOD(set_BlinkView);
+	ADD_METHOD(get_BlinkWhileThinking);
+	ADD_METHOD(set_BlinkWhileThinking);
+	ADD_METHOD(get_BlockingHeight);
+	ADD_METHOD(set_BlockingHeight);
+	ADD_METHOD(get_BlockingWidth);
+	ADD_METHOD(set_BlockingWidth);
+	ADD_METHOD(get_Clickable);
+	ADD_METHOD(set_Clickable);
+	ADD_METHOD(get_DiagonalLoops);
+	ADD_METHOD(set_DiagonalLoops);
+	ADD_METHOD(get_Frame);
+	ADD_METHOD(set_Frame);
+	ADD_METHOD(get_HasExplicitTint);
+	ADD_METHOD(get_ID);
+	ADD_METHOD(get_IdleView);
+	ADD_METHOD(get_IgnoreLighting);
+	ADD_METHOD(set_IgnoreLighting);
+	ADD_METHOD(get_IgnoreScaling);
+	ADD_METHOD(set_IgnoreScaling);
+	ADD_METHOD(get_IgnoreWalkbehinds);
+	ADD_METHOD(set_IgnoreWalkbehinds);
+	ADD_METHOD(geti_InventoryQuantity);
+	ADD_METHOD(seti_InventoryQuantity);
+	ADD_METHOD(get_Loop);
+	ADD_METHOD(set_Loop);
+	ADD_METHOD(get_ManualScaling);
+	ADD_METHOD(set_ManualScaling);
+	ADD_METHOD(get_MovementLinkedToAnimation);
+	ADD_METHOD(set_MovementLinkedToAnimation);
+	ADD_METHOD(get_Moving);
+	ADD_METHOD(get_Name);
+	ADD_METHOD(set_Name);
+	ADD_METHOD(get_NormalView);
+	ADD_METHOD(get_PreviousRoom);
+	ADD_METHOD(get_Room);
+	ADD_METHOD(get_ScaleMoveSpeed);
+	ADD_METHOD(set_ScaleMoveSpeed);
+	ADD_METHOD(get_ScaleVolume);
+	ADD_METHOD(set_ScaleVolume);
+	ADD_METHOD(get_Scaling);
+	ADD_METHOD(set_Scaling);
+	ADD_METHOD(get_Solid);
+	ADD_METHOD(set_Solid);
+	ADD_METHOD(get_Speaking);
+	ADD_METHOD(get_SpeakingFrame);
+	ADD_METHOD(get_SpeechAnimationDelay);
+	ADD_METHOD(set_SpeechAnimationDelay);
+	ADD_METHOD(get_SpeechColor);
+	ADD_METHOD(set_SpeechColor);
+	ADD_METHOD(get_SpeechView);
+	ADD_METHOD(set_SpeechView);
+	ADD_METHOD(get_ThinkView);
+	ADD_METHOD(set_ThinkView);
+	ADD_METHOD(get_Transparency);
+	ADD_METHOD(set_Transparency);
+	ADD_METHOD(get_TurnBeforeWalking);
+	ADD_METHOD(set_TurnBeforeWalking);
+	ADD_METHOD(get_View);
+	ADD_METHOD(get_WalkSpeedX);
+	ADD_METHOD(get_WalkSpeedY);
+	ADD_METHOD(get_x);
+	ADD_METHOD(set_x);
+	ADD_METHOD(get_y);
+	ADD_METHOD(set_y);
+	ADD_METHOD(get_z);
+	ADD_METHOD(set_z);
+	#undef ADD_METHOD
+	#undef ADD_MEMBER
+	
+	lua_settop(L,IDX_LIB);
+	return 1;
+};
+
+// AGS Interop Method Implementations
+AGS_ViewFrame* Lua_ToViewFrame(void* ptr) {
+	if (!ptr) {
+		return NULL;
+	}
+	lua_pushlightuserdata(vlist_L, ptr);
+	lua_rawget(vlist_L, VLIST_STACK_LISTSTORE);
+	lua_rawgeti(vlist_L, -1, 1);
+	if (!lua_getmetatable(vlist_L, -1)) {
+		lua_pop(vlist_L, 2);
+		return NULL;
+	}
+	lua_rawget(vlist_L, LUA_REGISTRYINDEX);
+	if (!lua_isstring(vlist_L,-1) || strcmp(lua_tostring(vlist_L,-1), "AGS_ViewFrame*")) {
+		lua_pop(vlist_L,3);
+		return NULL;
+	}
+	AGS_ViewFrame* viewframe = *(AGS_ViewFrame**)lua_touserdata(vlist_L,-2);
+	lua_pop(vlist_L,3);
+	return viewframe;
+}
+
+AGS_ViewFrame* LuaValueList_geti_AsViewFrames(void* ptr, int n) {
+	AGS_ViewFrame* viewframe;
+	aux_LuaValueList_geti(ptr, n);
+	if (!lua_getmetatable(vlist_L, -1)) {
+		lua_pop(vlist_L,1);
+		return NULL;
+	}
+	lua_rawget(vlist_L, LUA_REGISTRYINDEX);
+	if (!lua_isstring(vlist_L,-1) || strcmp(lua_tostring(vlist_L,-1), "AGS_ViewFrame*")) {
+		lua_pop(vlist_L,2);
+		return NULL;
+	}
+	viewframe = *(AGS_ViewFrame**)lua_touserdata(vlist_L,-2);
+	lua_pop(vlist_L,2);
+	return viewframe;
+}
+void LuaValueList_seti_AsViewFrames(void* ptr, int i, AGS_ViewFrame* viewframe) {
+	int IDX_VIEWFRAME_META, IDX_VIEWFRAME_STORE;
+	luaL_getmetatable(vlist_L, "AGS_ViewFrame*");
+	IDX_VIEWFRAME_META = lua_gettop(vlist_L);
+	luaL_getmetatable(vlist_L, "AGS_ViewFrame* store");
+	IDX_VIEWFRAME_STORE = lua_gettop(vlist_L);
+	luags_pushViewFrame(vlist_L, viewframe, IDX_VIEWFRAME_META, IDX_VIEWFRAME_STORE);
+	lua_replace(vlist_L, -3);
+	lua_pop(vlist_L, 1);
+	aux_LuaValueList_seti(ptr, i);
+}
+
+void* ViewFrame_AsLuaValue(AGS_ViewFrame* viewframe) {
+	int IDX_VIEWFRAME_META, IDX_VIEWFRAME_STORE;
+	luaL_getmetatable(vlist_L, "AGS_ViewFrame*");
+	IDX_VIEWFRAME_META = lua_gettop(vlist_L);
+	luaL_getmetatable(vlist_L, "AGS_ViewFrame* store");
+	IDX_VIEWFRAME_STORE = lua_gettop(vlist_L);
+	luags_pushViewFrame(vlist_L, viewframe, IDX_VIEWFRAME_META, IDX_VIEWFRAME_STORE);
+	lua_replace(vlist_L, -3);
+	lua_pop(vlist_L, 1);
+	return aux_LuaValueList_MakeReadOnly();
+}
+AGS_DrawingSurface* Lua_ToDrawingSurface(void* ptr) {
+	if (!ptr) {
+		return NULL;
+	}
+	lua_pushlightuserdata(vlist_L, ptr);
+	lua_rawget(vlist_L, VLIST_STACK_LISTSTORE);
+	lua_rawgeti(vlist_L, -1, 1);
+	if (!lua_getmetatable(vlist_L, -1)) {
+		lua_pop(vlist_L, 2);
+		return NULL;
+	}
+	lua_rawget(vlist_L, LUA_REGISTRYINDEX);
+	if (!lua_isstring(vlist_L,-1) || strcmp(lua_tostring(vlist_L,-1), "AGS_DrawingSurface*")) {
+		lua_pop(vlist_L,3);
+		return NULL;
+	}
+	AGS_DrawingSurface* drawingsurface = *(AGS_DrawingSurface**)lua_touserdata(vlist_L,-2);
+	lua_pop(vlist_L,3);
+	return drawingsurface;
+}
+
+AGS_DrawingSurface* LuaValueList_geti_AsDrawingSurfaces(void* ptr, int n) {
+	AGS_DrawingSurface* drawingsurface;
+	aux_LuaValueList_geti(ptr, n);
+	if (!lua_getmetatable(vlist_L, -1)) {
+		lua_pop(vlist_L,1);
+		return NULL;
+	}
+	lua_rawget(vlist_L, LUA_REGISTRYINDEX);
+	if (!lua_isstring(vlist_L,-1) || strcmp(lua_tostring(vlist_L,-1), "AGS_DrawingSurface*")) {
+		lua_pop(vlist_L,2);
+		return NULL;
+	}
+	drawingsurface = *(AGS_DrawingSurface**)lua_touserdata(vlist_L,-2);
+	lua_pop(vlist_L,2);
+	return drawingsurface;
+}
+void LuaValueList_seti_AsDrawingSurfaces(void* ptr, int i, AGS_DrawingSurface* drawingsurface) {
+	int IDX_DRAWINGSURFACE_META, IDX_DRAWINGSURFACE_STORE;
+	luaL_getmetatable(vlist_L, "AGS_DrawingSurface*");
+	IDX_DRAWINGSURFACE_META = lua_gettop(vlist_L);
+	luaL_getmetatable(vlist_L, "AGS_DrawingSurface* store");
+	IDX_DRAWINGSURFACE_STORE = lua_gettop(vlist_L);
+	luags_pushDrawingSurface(vlist_L, drawingsurface, IDX_DRAWINGSURFACE_META, IDX_DRAWINGSURFACE_STORE);
+	lua_replace(vlist_L, -3);
+	lua_pop(vlist_L, 1);
+	aux_LuaValueList_seti(ptr, i);
+}
+
+void* DrawingSurface_AsLuaValue(AGS_DrawingSurface* drawingsurface) {
+	int IDX_DRAWINGSURFACE_META, IDX_DRAWINGSURFACE_STORE;
+	luaL_getmetatable(vlist_L, "AGS_DrawingSurface*");
+	IDX_DRAWINGSURFACE_META = lua_gettop(vlist_L);
+	luaL_getmetatable(vlist_L, "AGS_DrawingSurface* store");
+	IDX_DRAWINGSURFACE_STORE = lua_gettop(vlist_L);
+	luags_pushDrawingSurface(vlist_L, drawingsurface, IDX_DRAWINGSURFACE_META, IDX_DRAWINGSURFACE_STORE);
+	lua_replace(vlist_L, -3);
+	lua_pop(vlist_L, 1);
+	return aux_LuaValueList_MakeReadOnly();
+}
+AGS_File* Lua_ToFile(void* ptr) {
+	if (!ptr) {
+		return NULL;
+	}
+	lua_pushlightuserdata(vlist_L, ptr);
+	lua_rawget(vlist_L, VLIST_STACK_LISTSTORE);
+	lua_rawgeti(vlist_L, -1, 1);
+	if (!lua_getmetatable(vlist_L, -1)) {
+		lua_pop(vlist_L, 2);
+		return NULL;
+	}
+	lua_rawget(vlist_L, LUA_REGISTRYINDEX);
+	if (!lua_isstring(vlist_L,-1) || strcmp(lua_tostring(vlist_L,-1), "AGS_File*")) {
+		lua_pop(vlist_L,3);
+		return NULL;
+	}
+	AGS_File* file = *(AGS_File**)lua_touserdata(vlist_L,-2);
+	lua_pop(vlist_L,3);
+	return file;
+}
+
+AGS_File* LuaValueList_geti_AsFiles(void* ptr, int n) {
+	AGS_File* file;
+	aux_LuaValueList_geti(ptr, n);
+	if (!lua_getmetatable(vlist_L, -1)) {
+		lua_pop(vlist_L,1);
+		return NULL;
+	}
+	lua_rawget(vlist_L, LUA_REGISTRYINDEX);
+	if (!lua_isstring(vlist_L,-1) || strcmp(lua_tostring(vlist_L,-1), "AGS_File*")) {
+		lua_pop(vlist_L,2);
+		return NULL;
+	}
+	file = *(AGS_File**)lua_touserdata(vlist_L,-2);
+	lua_pop(vlist_L,2);
+	return file;
+}
+void LuaValueList_seti_AsFiles(void* ptr, int i, AGS_File* file) {
+	int IDX_FILE_META, IDX_FILE_STORE;
+	luaL_getmetatable(vlist_L, "AGS_File*");
+	IDX_FILE_META = lua_gettop(vlist_L);
+	luaL_getmetatable(vlist_L, "AGS_File* store");
+	IDX_FILE_STORE = lua_gettop(vlist_L);
+	luags_pushFile(vlist_L, file, IDX_FILE_META, IDX_FILE_STORE);
+	lua_replace(vlist_L, -3);
+	lua_pop(vlist_L, 1);
+	aux_LuaValueList_seti(ptr, i);
+}
+
+void* File_AsLuaValue(AGS_File* file) {
+	int IDX_FILE_META, IDX_FILE_STORE;
+	luaL_getmetatable(vlist_L, "AGS_File*");
+	IDX_FILE_META = lua_gettop(vlist_L);
+	luaL_getmetatable(vlist_L, "AGS_File* store");
+	IDX_FILE_STORE = lua_gettop(vlist_L);
+	luags_pushFile(vlist_L, file, IDX_FILE_META, IDX_FILE_STORE);
+	lua_replace(vlist_L, -3);
+	lua_pop(vlist_L, 1);
+	return aux_LuaValueList_MakeReadOnly();
+}
+AGS_InventoryItem* Lua_ToInventoryItem(void* ptr) {
+	if (!ptr) {
+		return NULL;
+	}
+	lua_pushlightuserdata(vlist_L, ptr);
+	lua_rawget(vlist_L, VLIST_STACK_LISTSTORE);
+	lua_rawgeti(vlist_L, -1, 1);
+	if (!lua_getmetatable(vlist_L, -1)) {
+		lua_pop(vlist_L, 2);
+		return NULL;
+	}
+	lua_rawget(vlist_L, LUA_REGISTRYINDEX);
+	if (!lua_isstring(vlist_L,-1) || strcmp(lua_tostring(vlist_L,-1), "AGS_InventoryItem*")) {
+		lua_pop(vlist_L,3);
+		return NULL;
+	}
+	AGS_InventoryItem* inventoryitem = *(AGS_InventoryItem**)lua_touserdata(vlist_L,-2);
+	lua_pop(vlist_L,3);
+	return inventoryitem;
+}
+
+AGS_InventoryItem* LuaValueList_geti_AsInventoryItems(void* ptr, int n) {
+	AGS_InventoryItem* inventoryitem;
+	aux_LuaValueList_geti(ptr, n);
+	if (!lua_getmetatable(vlist_L, -1)) {
+		lua_pop(vlist_L,1);
+		return NULL;
+	}
+	lua_rawget(vlist_L, LUA_REGISTRYINDEX);
+	if (!lua_isstring(vlist_L,-1) || strcmp(lua_tostring(vlist_L,-1), "AGS_InventoryItem*")) {
+		lua_pop(vlist_L,2);
+		return NULL;
+	}
+	inventoryitem = *(AGS_InventoryItem**)lua_touserdata(vlist_L,-2);
+	lua_pop(vlist_L,2);
+	return inventoryitem;
+}
+void LuaValueList_seti_AsInventoryItems(void* ptr, int i, AGS_InventoryItem* inventoryitem) {
+	int IDX_INVENTORYITEM_META, IDX_INVENTORYITEM_STORE;
+	luaL_getmetatable(vlist_L, "AGS_InventoryItem*");
+	IDX_INVENTORYITEM_META = lua_gettop(vlist_L);
+	luaL_getmetatable(vlist_L, IMMORTAL_OBJECT_STORE);
+	IDX_INVENTORYITEM_STORE = lua_gettop(vlist_L);
+	luags_pushInventoryItem(vlist_L, inventoryitem, IDX_INVENTORYITEM_META, IDX_INVENTORYITEM_STORE);
+	lua_replace(vlist_L, -3);
+	lua_pop(vlist_L, 1);
+	aux_LuaValueList_seti(ptr, i);
+}
+
+void* InventoryItem_AsLuaValue(AGS_InventoryItem* inventoryitem) {
+	int IDX_INVENTORYITEM_META, IDX_INVENTORYITEM_STORE;
+	luaL_getmetatable(vlist_L, "AGS_InventoryItem*");
+	IDX_INVENTORYITEM_META = lua_gettop(vlist_L);
+	luaL_getmetatable(vlist_L, IMMORTAL_OBJECT_STORE);
+	IDX_INVENTORYITEM_STORE = lua_gettop(vlist_L);
+	luags_pushInventoryItem(vlist_L, inventoryitem, IDX_INVENTORYITEM_META, IDX_INVENTORYITEM_STORE);
+	lua_replace(vlist_L, -3);
+	lua_pop(vlist_L, 1);
+	return aux_LuaValueList_MakeReadOnly();
+}
+
+static void* InventoryItemGetLuaField(void* obj, const char* name) {
+	int IDX_META, IDX_STORE;
+	if (!name) {
+		lua_pushnil(vlist_L);
+	}
+	else {
+		luaL_getmetatable(main_L, "AGS_InventoryItem*");
+		IDX_META = lua_gettop(main_L);
+		luaL_getmetatable(main_L, IMMORTAL_OBJECT_STORE);
+		IDX_STORE = lua_gettop(main_L);
+		luags_pushInventoryItem(main_L, obj, IDX_META, IDX_STORE);
+		lua_replace(main_L, -3);
+		lua_pop(main_L,1);
+		lua_getfield(main_L,-1,name);
+		lua_xmove(main_L,vlist_L,1);
+	}
+	return aux_LuaValueList_Create(1, LUACALL_NONE);
+}
+
+static void InventoryItemSetLuaField(void* obj, const char* name, void* newValue) {
+	int IDX_META, IDX_STORE;
+	if (!name) {
+		engine->AbortGame("Cannot set Lua field with \"null\" name");
+		lua_pushnil(vlist_L);
+	}
+	luaL_getmetatable(main_L, "AGS_InventoryItem*");
+	IDX_META = lua_gettop(main_L);
+	luaL_getmetatable(main_L, IMMORTAL_OBJECT_STORE);
+	IDX_STORE = lua_gettop(main_L);
+	luags_pushInventoryItem(main_L, obj, IDX_META, IDX_STORE);
+	lua_replace(main_L, -3);
+	lua_pop(main_L,1);
+	if (newValue) {
+		lua_pushlightuserdata(vlist_L, newValue);
+		lua_gettable(vlist_L, VLIST_STACK_LISTSTORE);
+		lua_rawgeti(vlist_L, -1, 1);
+		lua_xmove(vlist_L, main_L, 1);
+		lua_pop(vlist_L, 1);
+	}
+	else {
+		lua_pushnil(main_L);
+	}
+	lua_setfield(main_L,-2,name);
+	lua_pop(main_L,1);
+}
+AGS_Overlay* Lua_ToOverlay(void* ptr) {
+	if (!ptr) {
+		return NULL;
+	}
+	lua_pushlightuserdata(vlist_L, ptr);
+	lua_rawget(vlist_L, VLIST_STACK_LISTSTORE);
+	lua_rawgeti(vlist_L, -1, 1);
+	if (!lua_getmetatable(vlist_L, -1)) {
+		lua_pop(vlist_L, 2);
+		return NULL;
+	}
+	lua_rawget(vlist_L, LUA_REGISTRYINDEX);
+	if (!lua_isstring(vlist_L,-1) || strcmp(lua_tostring(vlist_L,-1), "AGS_Overlay*")) {
+		lua_pop(vlist_L,3);
+		return NULL;
+	}
+	AGS_Overlay* overlay = *(AGS_Overlay**)lua_touserdata(vlist_L,-2);
+	lua_pop(vlist_L,3);
+	return overlay;
+}
+
+AGS_Overlay* LuaValueList_geti_AsOverlays(void* ptr, int n) {
+	AGS_Overlay* overlay;
+	aux_LuaValueList_geti(ptr, n);
+	if (!lua_getmetatable(vlist_L, -1)) {
+		lua_pop(vlist_L,1);
+		return NULL;
+	}
+	lua_rawget(vlist_L, LUA_REGISTRYINDEX);
+	if (!lua_isstring(vlist_L,-1) || strcmp(lua_tostring(vlist_L,-1), "AGS_Overlay*")) {
+		lua_pop(vlist_L,2);
+		return NULL;
+	}
+	overlay = *(AGS_Overlay**)lua_touserdata(vlist_L,-2);
+	lua_pop(vlist_L,2);
+	return overlay;
+}
+void LuaValueList_seti_AsOverlays(void* ptr, int i, AGS_Overlay* overlay) {
+	int IDX_OVERLAY_META, IDX_OVERLAY_STORE;
+	luaL_getmetatable(vlist_L, "AGS_Overlay*");
+	IDX_OVERLAY_META = lua_gettop(vlist_L);
+	luaL_getmetatable(vlist_L, "AGS_Overlay* store");
+	IDX_OVERLAY_STORE = lua_gettop(vlist_L);
+	luags_pushOverlay(vlist_L, overlay, IDX_OVERLAY_META, IDX_OVERLAY_STORE);
+	lua_replace(vlist_L, -3);
+	lua_pop(vlist_L, 1);
+	aux_LuaValueList_seti(ptr, i);
+}
+
+void* Overlay_AsLuaValue(AGS_Overlay* overlay) {
+	int IDX_OVERLAY_META, IDX_OVERLAY_STORE;
+	luaL_getmetatable(vlist_L, "AGS_Overlay*");
+	IDX_OVERLAY_META = lua_gettop(vlist_L);
+	luaL_getmetatable(vlist_L, "AGS_Overlay* store");
+	IDX_OVERLAY_STORE = lua_gettop(vlist_L);
+	luags_pushOverlay(vlist_L, overlay, IDX_OVERLAY_META, IDX_OVERLAY_STORE);
+	lua_replace(vlist_L, -3);
+	lua_pop(vlist_L, 1);
+	return aux_LuaValueList_MakeReadOnly();
+}
+AGS_DynamicSprite* Lua_ToDynamicSprite(void* ptr) {
+	if (!ptr) {
+		return NULL;
+	}
+	lua_pushlightuserdata(vlist_L, ptr);
+	lua_rawget(vlist_L, VLIST_STACK_LISTSTORE);
+	lua_rawgeti(vlist_L, -1, 1);
+	if (!lua_getmetatable(vlist_L, -1)) {
+		lua_pop(vlist_L, 2);
+		return NULL;
+	}
+	lua_rawget(vlist_L, LUA_REGISTRYINDEX);
+	if (!lua_isstring(vlist_L,-1) || strcmp(lua_tostring(vlist_L,-1), "AGS_DynamicSprite*")) {
+		lua_pop(vlist_L,3);
+		return NULL;
+	}
+	AGS_DynamicSprite* dynamicsprite = *(AGS_DynamicSprite**)lua_touserdata(vlist_L,-2);
+	lua_pop(vlist_L,3);
+	return dynamicsprite;
+}
+
+AGS_DynamicSprite* LuaValueList_geti_AsDynamicSprites(void* ptr, int n) {
+	AGS_DynamicSprite* dynamicsprite;
+	aux_LuaValueList_geti(ptr, n);
+	if (!lua_getmetatable(vlist_L, -1)) {
+		lua_pop(vlist_L,1);
+		return NULL;
+	}
+	lua_rawget(vlist_L, LUA_REGISTRYINDEX);
+	if (!lua_isstring(vlist_L,-1) || strcmp(lua_tostring(vlist_L,-1), "AGS_DynamicSprite*")) {
+		lua_pop(vlist_L,2);
+		return NULL;
+	}
+	dynamicsprite = *(AGS_DynamicSprite**)lua_touserdata(vlist_L,-2);
+	lua_pop(vlist_L,2);
+	return dynamicsprite;
+}
+void LuaValueList_seti_AsDynamicSprites(void* ptr, int i, AGS_DynamicSprite* dynamicsprite) {
+	int IDX_DYNAMICSPRITE_META, IDX_DYNAMICSPRITE_STORE;
+	luaL_getmetatable(vlist_L, "AGS_DynamicSprite*");
+	IDX_DYNAMICSPRITE_META = lua_gettop(vlist_L);
+	luaL_getmetatable(vlist_L, "AGS_DynamicSprite* store");
+	IDX_DYNAMICSPRITE_STORE = lua_gettop(vlist_L);
+	luags_pushDynamicSprite(vlist_L, dynamicsprite, IDX_DYNAMICSPRITE_META, IDX_DYNAMICSPRITE_STORE);
+	lua_replace(vlist_L, -3);
+	lua_pop(vlist_L, 1);
+	aux_LuaValueList_seti(ptr, i);
+}
+
+void* DynamicSprite_AsLuaValue(AGS_DynamicSprite* dynamicsprite) {
+	int IDX_DYNAMICSPRITE_META, IDX_DYNAMICSPRITE_STORE;
+	luaL_getmetatable(vlist_L, "AGS_DynamicSprite*");
+	IDX_DYNAMICSPRITE_META = lua_gettop(vlist_L);
+	luaL_getmetatable(vlist_L, "AGS_DynamicSprite* store");
+	IDX_DYNAMICSPRITE_STORE = lua_gettop(vlist_L);
+	luags_pushDynamicSprite(vlist_L, dynamicsprite, IDX_DYNAMICSPRITE_META, IDX_DYNAMICSPRITE_STORE);
+	lua_replace(vlist_L, -3);
+	lua_pop(vlist_L, 1);
+	return aux_LuaValueList_MakeReadOnly();
+}
+AGS_GUIControl* Lua_ToGUIControl(void* ptr) {
+	if (!ptr) {
+		return NULL;
+	}
+	lua_pushlightuserdata(vlist_L, ptr);
+	lua_rawget(vlist_L, VLIST_STACK_LISTSTORE);
+	lua_rawgeti(vlist_L, -1, 1);
+	if (!lua_getmetatable(vlist_L, -1)) {
+		lua_pop(vlist_L, 2);
+		return NULL;
+	}
+	lua_rawget(vlist_L, LUA_REGISTRYINDEX);
+	if (!lua_isstring(vlist_L,-1) || strcmp(lua_tostring(vlist_L,-1), "AGS_GUIControl*")) {
+		lua_pop(vlist_L,3);
+		return NULL;
+	}
+	AGS_GUIControl* guicontrol = *(AGS_GUIControl**)lua_touserdata(vlist_L,-2);
+	lua_pop(vlist_L,3);
+	return guicontrol;
+}
+
+AGS_GUIControl* LuaValueList_geti_AsGUIControls(void* ptr, int n) {
+	AGS_GUIControl* guicontrol;
+	aux_LuaValueList_geti(ptr, n);
+	if (!lua_getmetatable(vlist_L, -1)) {
+		lua_pop(vlist_L,1);
+		return NULL;
+	}
+	lua_rawget(vlist_L, LUA_REGISTRYINDEX);
+	if (!lua_isstring(vlist_L,-1) || strcmp(lua_tostring(vlist_L,-1), "AGS_GUIControl*")) {
+		lua_pop(vlist_L,2);
+		return NULL;
+	}
+	guicontrol = *(AGS_GUIControl**)lua_touserdata(vlist_L,-2);
+	lua_pop(vlist_L,2);
+	return guicontrol;
+}
+void LuaValueList_seti_AsGUIControls(void* ptr, int i, AGS_GUIControl* guicontrol) {
+	int IDX_GUICONTROL_META, IDX_GUICONTROL_STORE;
+	luaL_getmetatable(vlist_L, "AGS_GUIControl*");
+	IDX_GUICONTROL_META = lua_gettop(vlist_L);
+	luaL_getmetatable(vlist_L, "AGS_GUIControl* store");
+	IDX_GUICONTROL_STORE = lua_gettop(vlist_L);
+	luags_pushGUIControl(vlist_L, guicontrol, IDX_GUICONTROL_META, IDX_GUICONTROL_STORE);
+	lua_replace(vlist_L, -3);
+	lua_pop(vlist_L, 1);
+	aux_LuaValueList_seti(ptr, i);
+}
+
+void* GUIControl_AsLuaValue(AGS_GUIControl* guicontrol) {
+	int IDX_GUICONTROL_META, IDX_GUICONTROL_STORE;
+	luaL_getmetatable(vlist_L, "AGS_GUIControl*");
+	IDX_GUICONTROL_META = lua_gettop(vlist_L);
+	luaL_getmetatable(vlist_L, "AGS_GUIControl* store");
+	IDX_GUICONTROL_STORE = lua_gettop(vlist_L);
+	luags_pushGUIControl(vlist_L, guicontrol, IDX_GUICONTROL_META, IDX_GUICONTROL_STORE);
+	lua_replace(vlist_L, -3);
+	lua_pop(vlist_L, 1);
+	return aux_LuaValueList_MakeReadOnly();
+}
+
+static void* GUIControlGetLuaField(void* obj, const char* name) {
+	int IDX_META, IDX_STORE;
+	if (!name) {
+		lua_pushnil(vlist_L);
+	}
+	else {
+		luaL_getmetatable(main_L, "AGS_GUIControl*");
+		IDX_META = lua_gettop(main_L);
+		luaL_getmetatable(main_L, "AGS_GUIControl* store");
+		IDX_STORE = lua_gettop(main_L);
+		luags_pushGUIControl(main_L, obj, IDX_META, IDX_STORE);
+		lua_replace(main_L, -3);
+		lua_pop(main_L,1);
+		lua_getfield(main_L,-1,name);
+		lua_xmove(main_L,vlist_L,1);
+	}
+	return aux_LuaValueList_Create(1, LUACALL_NONE);
+}
+
+static void GUIControlSetLuaField(void* obj, const char* name, void* newValue) {
+	int IDX_META, IDX_STORE;
+	if (!name) {
+		engine->AbortGame("Cannot set Lua field with \"null\" name");
+		lua_pushnil(vlist_L);
+	}
+	luaL_getmetatable(main_L, "AGS_GUIControl*");
+	IDX_META = lua_gettop(main_L);
+	luaL_getmetatable(main_L, "AGS_GUIControl* store");
+	IDX_STORE = lua_gettop(main_L);
+	luags_pushGUIControl(main_L, obj, IDX_META, IDX_STORE);
+	lua_replace(main_L, -3);
+	lua_pop(main_L,1);
+	if (newValue) {
+		lua_pushlightuserdata(vlist_L, newValue);
+		lua_gettable(vlist_L, VLIST_STACK_LISTSTORE);
+		lua_rawgeti(vlist_L, -1, 1);
+		lua_xmove(vlist_L, main_L, 1);
+		lua_pop(vlist_L, 1);
+	}
+	else {
+		lua_pushnil(main_L);
+	}
+	lua_setfield(main_L,-2,name);
+	lua_pop(main_L,1);
+}
+AGS_Label* Lua_ToLabel(void* ptr) {
+	if (!ptr) {
+		return NULL;
+	}
+	lua_pushlightuserdata(vlist_L, ptr);
+	lua_rawget(vlist_L, VLIST_STACK_LISTSTORE);
+	lua_rawgeti(vlist_L, -1, 1);
+	if (!lua_getmetatable(vlist_L, -1)) {
+		lua_pop(vlist_L, 2);
+		return NULL;
+	}
+	lua_rawget(vlist_L, LUA_REGISTRYINDEX);
+	if (!lua_isstring(vlist_L,-1) || strcmp(lua_tostring(vlist_L,-1), "AGS_Label*")) {
+		lua_pop(vlist_L,3);
+		return NULL;
+	}
+	AGS_Label* label = *(AGS_Label**)lua_touserdata(vlist_L,-2);
+	lua_pop(vlist_L,3);
+	return label;
+}
+
+AGS_Label* LuaValueList_geti_AsLabels(void* ptr, int n) {
+	AGS_Label* label;
+	aux_LuaValueList_geti(ptr, n);
+	if (!lua_getmetatable(vlist_L, -1)) {
+		lua_pop(vlist_L,1);
+		return NULL;
+	}
+	lua_rawget(vlist_L, LUA_REGISTRYINDEX);
+	if (!lua_isstring(vlist_L,-1) || strcmp(lua_tostring(vlist_L,-1), "AGS_Label*")) {
+		lua_pop(vlist_L,2);
+		return NULL;
+	}
+	label = *(AGS_Label**)lua_touserdata(vlist_L,-2);
+	lua_pop(vlist_L,2);
+	return label;
+}
+void LuaValueList_seti_AsLabels(void* ptr, int i, AGS_Label* label) {
+	int IDX_LABEL_META, IDX_LABEL_STORE;
+	luaL_getmetatable(vlist_L, "AGS_Label*");
+	IDX_LABEL_META = lua_gettop(vlist_L);
+	luaL_getmetatable(vlist_L, IMMORTAL_OBJECT_STORE);
+	IDX_LABEL_STORE = lua_gettop(vlist_L);
+	luags_pushLabel(vlist_L, label, IDX_LABEL_META, IDX_LABEL_STORE);
+	lua_replace(vlist_L, -3);
+	lua_pop(vlist_L, 1);
+	aux_LuaValueList_seti(ptr, i);
+}
+
+void* Label_AsLuaValue(AGS_Label* label) {
+	int IDX_LABEL_META, IDX_LABEL_STORE;
+	luaL_getmetatable(vlist_L, "AGS_Label*");
+	IDX_LABEL_META = lua_gettop(vlist_L);
+	luaL_getmetatable(vlist_L, IMMORTAL_OBJECT_STORE);
+	IDX_LABEL_STORE = lua_gettop(vlist_L);
+	luags_pushLabel(vlist_L, label, IDX_LABEL_META, IDX_LABEL_STORE);
+	lua_replace(vlist_L, -3);
+	lua_pop(vlist_L, 1);
+	return aux_LuaValueList_MakeReadOnly();
+}
+
+static void* LabelGetLuaField(void* obj, const char* name) {
+	int IDX_META, IDX_STORE;
+	if (!name) {
+		lua_pushnil(vlist_L);
+	}
+	else {
+		luaL_getmetatable(main_L, "AGS_Label*");
+		IDX_META = lua_gettop(main_L);
+		luaL_getmetatable(main_L, IMMORTAL_OBJECT_STORE);
+		IDX_STORE = lua_gettop(main_L);
+		luags_pushLabel(main_L, obj, IDX_META, IDX_STORE);
+		lua_replace(main_L, -3);
+		lua_pop(main_L,1);
+		lua_getfield(main_L,-1,name);
+		lua_xmove(main_L,vlist_L,1);
+	}
+	return aux_LuaValueList_Create(1, LUACALL_NONE);
+}
+
+static void LabelSetLuaField(void* obj, const char* name, void* newValue) {
+	int IDX_META, IDX_STORE;
+	if (!name) {
+		engine->AbortGame("Cannot set Lua field with \"null\" name");
+		lua_pushnil(vlist_L);
+	}
+	luaL_getmetatable(main_L, "AGS_Label*");
+	IDX_META = lua_gettop(main_L);
+	luaL_getmetatable(main_L, IMMORTAL_OBJECT_STORE);
+	IDX_STORE = lua_gettop(main_L);
+	luags_pushLabel(main_L, obj, IDX_META, IDX_STORE);
+	lua_replace(main_L, -3);
+	lua_pop(main_L,1);
+	if (newValue) {
+		lua_pushlightuserdata(vlist_L, newValue);
+		lua_gettable(vlist_L, VLIST_STACK_LISTSTORE);
+		lua_rawgeti(vlist_L, -1, 1);
+		lua_xmove(vlist_L, main_L, 1);
+		lua_pop(vlist_L, 1);
+	}
+	else {
+		lua_pushnil(main_L);
+	}
+	lua_setfield(main_L,-2,name);
+	lua_pop(main_L,1);
+}
+AGS_Button* Lua_ToButton(void* ptr) {
+	if (!ptr) {
+		return NULL;
+	}
+	lua_pushlightuserdata(vlist_L, ptr);
+	lua_rawget(vlist_L, VLIST_STACK_LISTSTORE);
+	lua_rawgeti(vlist_L, -1, 1);
+	if (!lua_getmetatable(vlist_L, -1)) {
+		lua_pop(vlist_L, 2);
+		return NULL;
+	}
+	lua_rawget(vlist_L, LUA_REGISTRYINDEX);
+	if (!lua_isstring(vlist_L,-1) || strcmp(lua_tostring(vlist_L,-1), "AGS_Button*")) {
+		lua_pop(vlist_L,3);
+		return NULL;
+	}
+	AGS_Button* button = *(AGS_Button**)lua_touserdata(vlist_L,-2);
+	lua_pop(vlist_L,3);
+	return button;
+}
+
+AGS_Button* LuaValueList_geti_AsButtons(void* ptr, int n) {
+	AGS_Button* button;
+	aux_LuaValueList_geti(ptr, n);
+	if (!lua_getmetatable(vlist_L, -1)) {
+		lua_pop(vlist_L,1);
+		return NULL;
+	}
+	lua_rawget(vlist_L, LUA_REGISTRYINDEX);
+	if (!lua_isstring(vlist_L,-1) || strcmp(lua_tostring(vlist_L,-1), "AGS_Button*")) {
+		lua_pop(vlist_L,2);
+		return NULL;
+	}
+	button = *(AGS_Button**)lua_touserdata(vlist_L,-2);
+	lua_pop(vlist_L,2);
+	return button;
+}
+void LuaValueList_seti_AsButtons(void* ptr, int i, AGS_Button* button) {
+	int IDX_BUTTON_META, IDX_BUTTON_STORE;
+	luaL_getmetatable(vlist_L, "AGS_Button*");
+	IDX_BUTTON_META = lua_gettop(vlist_L);
+	luaL_getmetatable(vlist_L, IMMORTAL_OBJECT_STORE);
+	IDX_BUTTON_STORE = lua_gettop(vlist_L);
+	luags_pushButton(vlist_L, button, IDX_BUTTON_META, IDX_BUTTON_STORE);
+	lua_replace(vlist_L, -3);
+	lua_pop(vlist_L, 1);
+	aux_LuaValueList_seti(ptr, i);
+}
+
+void* Button_AsLuaValue(AGS_Button* button) {
+	int IDX_BUTTON_META, IDX_BUTTON_STORE;
+	luaL_getmetatable(vlist_L, "AGS_Button*");
+	IDX_BUTTON_META = lua_gettop(vlist_L);
+	luaL_getmetatable(vlist_L, IMMORTAL_OBJECT_STORE);
+	IDX_BUTTON_STORE = lua_gettop(vlist_L);
+	luags_pushButton(vlist_L, button, IDX_BUTTON_META, IDX_BUTTON_STORE);
+	lua_replace(vlist_L, -3);
+	lua_pop(vlist_L, 1);
+	return aux_LuaValueList_MakeReadOnly();
+}
+
+static void* ButtonGetLuaField(void* obj, const char* name) {
+	int IDX_META, IDX_STORE;
+	if (!name) {
+		lua_pushnil(vlist_L);
+	}
+	else {
+		luaL_getmetatable(main_L, "AGS_Button*");
+		IDX_META = lua_gettop(main_L);
+		luaL_getmetatable(main_L, IMMORTAL_OBJECT_STORE);
+		IDX_STORE = lua_gettop(main_L);
+		luags_pushButton(main_L, obj, IDX_META, IDX_STORE);
+		lua_replace(main_L, -3);
+		lua_pop(main_L,1);
+		lua_getfield(main_L,-1,name);
+		lua_xmove(main_L,vlist_L,1);
+	}
+	return aux_LuaValueList_Create(1, LUACALL_NONE);
+}
+
+static void ButtonSetLuaField(void* obj, const char* name, void* newValue) {
+	int IDX_META, IDX_STORE;
+	if (!name) {
+		engine->AbortGame("Cannot set Lua field with \"null\" name");
+		lua_pushnil(vlist_L);
+	}
+	luaL_getmetatable(main_L, "AGS_Button*");
+	IDX_META = lua_gettop(main_L);
+	luaL_getmetatable(main_L, IMMORTAL_OBJECT_STORE);
+	IDX_STORE = lua_gettop(main_L);
+	luags_pushButton(main_L, obj, IDX_META, IDX_STORE);
+	lua_replace(main_L, -3);
+	lua_pop(main_L,1);
+	if (newValue) {
+		lua_pushlightuserdata(vlist_L, newValue);
+		lua_gettable(vlist_L, VLIST_STACK_LISTSTORE);
+		lua_rawgeti(vlist_L, -1, 1);
+		lua_xmove(vlist_L, main_L, 1);
+		lua_pop(vlist_L, 1);
+	}
+	else {
+		lua_pushnil(main_L);
+	}
+	lua_setfield(main_L,-2,name);
+	lua_pop(main_L,1);
+}
+AGS_Slider* Lua_ToSlider(void* ptr) {
+	if (!ptr) {
+		return NULL;
+	}
+	lua_pushlightuserdata(vlist_L, ptr);
+	lua_rawget(vlist_L, VLIST_STACK_LISTSTORE);
+	lua_rawgeti(vlist_L, -1, 1);
+	if (!lua_getmetatable(vlist_L, -1)) {
+		lua_pop(vlist_L, 2);
+		return NULL;
+	}
+	lua_rawget(vlist_L, LUA_REGISTRYINDEX);
+	if (!lua_isstring(vlist_L,-1) || strcmp(lua_tostring(vlist_L,-1), "AGS_Slider*")) {
+		lua_pop(vlist_L,3);
+		return NULL;
+	}
+	AGS_Slider* slider = *(AGS_Slider**)lua_touserdata(vlist_L,-2);
+	lua_pop(vlist_L,3);
+	return slider;
+}
+
+AGS_Slider* LuaValueList_geti_AsSliders(void* ptr, int n) {
+	AGS_Slider* slider;
+	aux_LuaValueList_geti(ptr, n);
+	if (!lua_getmetatable(vlist_L, -1)) {
+		lua_pop(vlist_L,1);
+		return NULL;
+	}
+	lua_rawget(vlist_L, LUA_REGISTRYINDEX);
+	if (!lua_isstring(vlist_L,-1) || strcmp(lua_tostring(vlist_L,-1), "AGS_Slider*")) {
+		lua_pop(vlist_L,2);
+		return NULL;
+	}
+	slider = *(AGS_Slider**)lua_touserdata(vlist_L,-2);
+	lua_pop(vlist_L,2);
+	return slider;
+}
+void LuaValueList_seti_AsSliders(void* ptr, int i, AGS_Slider* slider) {
+	int IDX_SLIDER_META, IDX_SLIDER_STORE;
+	luaL_getmetatable(vlist_L, "AGS_Slider*");
+	IDX_SLIDER_META = lua_gettop(vlist_L);
+	luaL_getmetatable(vlist_L, IMMORTAL_OBJECT_STORE);
+	IDX_SLIDER_STORE = lua_gettop(vlist_L);
+	luags_pushSlider(vlist_L, slider, IDX_SLIDER_META, IDX_SLIDER_STORE);
+	lua_replace(vlist_L, -3);
+	lua_pop(vlist_L, 1);
+	aux_LuaValueList_seti(ptr, i);
+}
+
+void* Slider_AsLuaValue(AGS_Slider* slider) {
+	int IDX_SLIDER_META, IDX_SLIDER_STORE;
+	luaL_getmetatable(vlist_L, "AGS_Slider*");
+	IDX_SLIDER_META = lua_gettop(vlist_L);
+	luaL_getmetatable(vlist_L, IMMORTAL_OBJECT_STORE);
+	IDX_SLIDER_STORE = lua_gettop(vlist_L);
+	luags_pushSlider(vlist_L, slider, IDX_SLIDER_META, IDX_SLIDER_STORE);
+	lua_replace(vlist_L, -3);
+	lua_pop(vlist_L, 1);
+	return aux_LuaValueList_MakeReadOnly();
+}
+
+static void* SliderGetLuaField(void* obj, const char* name) {
+	int IDX_META, IDX_STORE;
+	if (!name) {
+		lua_pushnil(vlist_L);
+	}
+	else {
+		luaL_getmetatable(main_L, "AGS_Slider*");
+		IDX_META = lua_gettop(main_L);
+		luaL_getmetatable(main_L, IMMORTAL_OBJECT_STORE);
+		IDX_STORE = lua_gettop(main_L);
+		luags_pushSlider(main_L, obj, IDX_META, IDX_STORE);
+		lua_replace(main_L, -3);
+		lua_pop(main_L,1);
+		lua_getfield(main_L,-1,name);
+		lua_xmove(main_L,vlist_L,1);
+	}
+	return aux_LuaValueList_Create(1, LUACALL_NONE);
+}
+
+static void SliderSetLuaField(void* obj, const char* name, void* newValue) {
+	int IDX_META, IDX_STORE;
+	if (!name) {
+		engine->AbortGame("Cannot set Lua field with \"null\" name");
+		lua_pushnil(vlist_L);
+	}
+	luaL_getmetatable(main_L, "AGS_Slider*");
+	IDX_META = lua_gettop(main_L);
+	luaL_getmetatable(main_L, IMMORTAL_OBJECT_STORE);
+	IDX_STORE = lua_gettop(main_L);
+	luags_pushSlider(main_L, obj, IDX_META, IDX_STORE);
+	lua_replace(main_L, -3);
+	lua_pop(main_L,1);
+	if (newValue) {
+		lua_pushlightuserdata(vlist_L, newValue);
+		lua_gettable(vlist_L, VLIST_STACK_LISTSTORE);
+		lua_rawgeti(vlist_L, -1, 1);
+		lua_xmove(vlist_L, main_L, 1);
+		lua_pop(vlist_L, 1);
+	}
+	else {
+		lua_pushnil(main_L);
+	}
+	lua_setfield(main_L,-2,name);
+	lua_pop(main_L,1);
+}
+AGS_TextBox* Lua_ToTextBox(void* ptr) {
+	if (!ptr) {
+		return NULL;
+	}
+	lua_pushlightuserdata(vlist_L, ptr);
+	lua_rawget(vlist_L, VLIST_STACK_LISTSTORE);
+	lua_rawgeti(vlist_L, -1, 1);
+	if (!lua_getmetatable(vlist_L, -1)) {
+		lua_pop(vlist_L, 2);
+		return NULL;
+	}
+	lua_rawget(vlist_L, LUA_REGISTRYINDEX);
+	if (!lua_isstring(vlist_L,-1) || strcmp(lua_tostring(vlist_L,-1), "AGS_TextBox*")) {
+		lua_pop(vlist_L,3);
+		return NULL;
+	}
+	AGS_TextBox* textbox = *(AGS_TextBox**)lua_touserdata(vlist_L,-2);
+	lua_pop(vlist_L,3);
+	return textbox;
+}
+
+AGS_TextBox* LuaValueList_geti_AsTextBoxes(void* ptr, int n) {
+	AGS_TextBox* textbox;
+	aux_LuaValueList_geti(ptr, n);
+	if (!lua_getmetatable(vlist_L, -1)) {
+		lua_pop(vlist_L,1);
+		return NULL;
+	}
+	lua_rawget(vlist_L, LUA_REGISTRYINDEX);
+	if (!lua_isstring(vlist_L,-1) || strcmp(lua_tostring(vlist_L,-1), "AGS_TextBox*")) {
+		lua_pop(vlist_L,2);
+		return NULL;
+	}
+	textbox = *(AGS_TextBox**)lua_touserdata(vlist_L,-2);
+	lua_pop(vlist_L,2);
+	return textbox;
+}
+void LuaValueList_seti_AsTextBoxes(void* ptr, int i, AGS_TextBox* textbox) {
+	int IDX_TEXTBOX_META, IDX_TEXTBOX_STORE;
+	luaL_getmetatable(vlist_L, "AGS_TextBox*");
+	IDX_TEXTBOX_META = lua_gettop(vlist_L);
+	luaL_getmetatable(vlist_L, IMMORTAL_OBJECT_STORE);
+	IDX_TEXTBOX_STORE = lua_gettop(vlist_L);
+	luags_pushTextBox(vlist_L, textbox, IDX_TEXTBOX_META, IDX_TEXTBOX_STORE);
+	lua_replace(vlist_L, -3);
+	lua_pop(vlist_L, 1);
+	aux_LuaValueList_seti(ptr, i);
+}
+
+void* TextBox_AsLuaValue(AGS_TextBox* textbox) {
+	int IDX_TEXTBOX_META, IDX_TEXTBOX_STORE;
+	luaL_getmetatable(vlist_L, "AGS_TextBox*");
+	IDX_TEXTBOX_META = lua_gettop(vlist_L);
+	luaL_getmetatable(vlist_L, IMMORTAL_OBJECT_STORE);
+	IDX_TEXTBOX_STORE = lua_gettop(vlist_L);
+	luags_pushTextBox(vlist_L, textbox, IDX_TEXTBOX_META, IDX_TEXTBOX_STORE);
+	lua_replace(vlist_L, -3);
+	lua_pop(vlist_L, 1);
+	return aux_LuaValueList_MakeReadOnly();
+}
+
+static void* TextBoxGetLuaField(void* obj, const char* name) {
+	int IDX_META, IDX_STORE;
+	if (!name) {
+		lua_pushnil(vlist_L);
+	}
+	else {
+		luaL_getmetatable(main_L, "AGS_TextBox*");
+		IDX_META = lua_gettop(main_L);
+		luaL_getmetatable(main_L, IMMORTAL_OBJECT_STORE);
+		IDX_STORE = lua_gettop(main_L);
+		luags_pushTextBox(main_L, obj, IDX_META, IDX_STORE);
+		lua_replace(main_L, -3);
+		lua_pop(main_L,1);
+		lua_getfield(main_L,-1,name);
+		lua_xmove(main_L,vlist_L,1);
+	}
+	return aux_LuaValueList_Create(1, LUACALL_NONE);
+}
+
+static void TextBoxSetLuaField(void* obj, const char* name, void* newValue) {
+	int IDX_META, IDX_STORE;
+	if (!name) {
+		engine->AbortGame("Cannot set Lua field with \"null\" name");
+		lua_pushnil(vlist_L);
+	}
+	luaL_getmetatable(main_L, "AGS_TextBox*");
+	IDX_META = lua_gettop(main_L);
+	luaL_getmetatable(main_L, IMMORTAL_OBJECT_STORE);
+	IDX_STORE = lua_gettop(main_L);
+	luags_pushTextBox(main_L, obj, IDX_META, IDX_STORE);
+	lua_replace(main_L, -3);
+	lua_pop(main_L,1);
+	if (newValue) {
+		lua_pushlightuserdata(vlist_L, newValue);
+		lua_gettable(vlist_L, VLIST_STACK_LISTSTORE);
+		lua_rawgeti(vlist_L, -1, 1);
+		lua_xmove(vlist_L, main_L, 1);
+		lua_pop(vlist_L, 1);
+	}
+	else {
+		lua_pushnil(main_L);
+	}
+	lua_setfield(main_L,-2,name);
+	lua_pop(main_L,1);
+}
+AGS_InvWindow* Lua_ToInvWindow(void* ptr) {
+	if (!ptr) {
+		return NULL;
+	}
+	lua_pushlightuserdata(vlist_L, ptr);
+	lua_rawget(vlist_L, VLIST_STACK_LISTSTORE);
+	lua_rawgeti(vlist_L, -1, 1);
+	if (!lua_getmetatable(vlist_L, -1)) {
+		lua_pop(vlist_L, 2);
+		return NULL;
+	}
+	lua_rawget(vlist_L, LUA_REGISTRYINDEX);
+	if (!lua_isstring(vlist_L,-1) || strcmp(lua_tostring(vlist_L,-1), "AGS_InvWindow*")) {
+		lua_pop(vlist_L,3);
+		return NULL;
+	}
+	AGS_InvWindow* invwindow = *(AGS_InvWindow**)lua_touserdata(vlist_L,-2);
+	lua_pop(vlist_L,3);
+	return invwindow;
+}
+
+AGS_InvWindow* LuaValueList_geti_AsInvWindows(void* ptr, int n) {
+	AGS_InvWindow* invwindow;
+	aux_LuaValueList_geti(ptr, n);
+	if (!lua_getmetatable(vlist_L, -1)) {
+		lua_pop(vlist_L,1);
+		return NULL;
+	}
+	lua_rawget(vlist_L, LUA_REGISTRYINDEX);
+	if (!lua_isstring(vlist_L,-1) || strcmp(lua_tostring(vlist_L,-1), "AGS_InvWindow*")) {
+		lua_pop(vlist_L,2);
+		return NULL;
+	}
+	invwindow = *(AGS_InvWindow**)lua_touserdata(vlist_L,-2);
+	lua_pop(vlist_L,2);
+	return invwindow;
+}
+void LuaValueList_seti_AsInvWindows(void* ptr, int i, AGS_InvWindow* invwindow) {
+	int IDX_INVWINDOW_META, IDX_INVWINDOW_STORE;
+	luaL_getmetatable(vlist_L, "AGS_InvWindow*");
+	IDX_INVWINDOW_META = lua_gettop(vlist_L);
+	luaL_getmetatable(vlist_L, IMMORTAL_OBJECT_STORE);
+	IDX_INVWINDOW_STORE = lua_gettop(vlist_L);
+	luags_pushInvWindow(vlist_L, invwindow, IDX_INVWINDOW_META, IDX_INVWINDOW_STORE);
+	lua_replace(vlist_L, -3);
+	lua_pop(vlist_L, 1);
+	aux_LuaValueList_seti(ptr, i);
+}
+
+void* InvWindow_AsLuaValue(AGS_InvWindow* invwindow) {
+	int IDX_INVWINDOW_META, IDX_INVWINDOW_STORE;
+	luaL_getmetatable(vlist_L, "AGS_InvWindow*");
+	IDX_INVWINDOW_META = lua_gettop(vlist_L);
+	luaL_getmetatable(vlist_L, IMMORTAL_OBJECT_STORE);
+	IDX_INVWINDOW_STORE = lua_gettop(vlist_L);
+	luags_pushInvWindow(vlist_L, invwindow, IDX_INVWINDOW_META, IDX_INVWINDOW_STORE);
+	lua_replace(vlist_L, -3);
+	lua_pop(vlist_L, 1);
+	return aux_LuaValueList_MakeReadOnly();
+}
+
+static void* InvWindowGetLuaField(void* obj, const char* name) {
+	int IDX_META, IDX_STORE;
+	if (!name) {
+		lua_pushnil(vlist_L);
+	}
+	else {
+		luaL_getmetatable(main_L, "AGS_InvWindow*");
+		IDX_META = lua_gettop(main_L);
+		luaL_getmetatable(main_L, IMMORTAL_OBJECT_STORE);
+		IDX_STORE = lua_gettop(main_L);
+		luags_pushInvWindow(main_L, obj, IDX_META, IDX_STORE);
+		lua_replace(main_L, -3);
+		lua_pop(main_L,1);
+		lua_getfield(main_L,-1,name);
+		lua_xmove(main_L,vlist_L,1);
+	}
+	return aux_LuaValueList_Create(1, LUACALL_NONE);
+}
+
+static void InvWindowSetLuaField(void* obj, const char* name, void* newValue) {
+	int IDX_META, IDX_STORE;
+	if (!name) {
+		engine->AbortGame("Cannot set Lua field with \"null\" name");
+		lua_pushnil(vlist_L);
+	}
+	luaL_getmetatable(main_L, "AGS_InvWindow*");
+	IDX_META = lua_gettop(main_L);
+	luaL_getmetatable(main_L, IMMORTAL_OBJECT_STORE);
+	IDX_STORE = lua_gettop(main_L);
+	luags_pushInvWindow(main_L, obj, IDX_META, IDX_STORE);
+	lua_replace(main_L, -3);
+	lua_pop(main_L,1);
+	if (newValue) {
+		lua_pushlightuserdata(vlist_L, newValue);
+		lua_gettable(vlist_L, VLIST_STACK_LISTSTORE);
+		lua_rawgeti(vlist_L, -1, 1);
+		lua_xmove(vlist_L, main_L, 1);
+		lua_pop(vlist_L, 1);
+	}
+	else {
+		lua_pushnil(main_L);
+	}
+	lua_setfield(main_L,-2,name);
+	lua_pop(main_L,1);
+}
+AGS_ListBox* Lua_ToListBox(void* ptr) {
+	if (!ptr) {
+		return NULL;
+	}
+	lua_pushlightuserdata(vlist_L, ptr);
+	lua_rawget(vlist_L, VLIST_STACK_LISTSTORE);
+	lua_rawgeti(vlist_L, -1, 1);
+	if (!lua_getmetatable(vlist_L, -1)) {
+		lua_pop(vlist_L, 2);
+		return NULL;
+	}
+	lua_rawget(vlist_L, LUA_REGISTRYINDEX);
+	if (!lua_isstring(vlist_L,-1) || strcmp(lua_tostring(vlist_L,-1), "AGS_ListBox*")) {
+		lua_pop(vlist_L,3);
+		return NULL;
+	}
+	AGS_ListBox* listbox = *(AGS_ListBox**)lua_touserdata(vlist_L,-2);
+	lua_pop(vlist_L,3);
+	return listbox;
+}
+
+AGS_ListBox* LuaValueList_geti_AsListBoxes(void* ptr, int n) {
+	AGS_ListBox* listbox;
+	aux_LuaValueList_geti(ptr, n);
+	if (!lua_getmetatable(vlist_L, -1)) {
+		lua_pop(vlist_L,1);
+		return NULL;
+	}
+	lua_rawget(vlist_L, LUA_REGISTRYINDEX);
+	if (!lua_isstring(vlist_L,-1) || strcmp(lua_tostring(vlist_L,-1), "AGS_ListBox*")) {
+		lua_pop(vlist_L,2);
+		return NULL;
+	}
+	listbox = *(AGS_ListBox**)lua_touserdata(vlist_L,-2);
+	lua_pop(vlist_L,2);
+	return listbox;
+}
+void LuaValueList_seti_AsListBoxes(void* ptr, int i, AGS_ListBox* listbox) {
+	int IDX_LISTBOX_META, IDX_LISTBOX_STORE;
+	luaL_getmetatable(vlist_L, "AGS_ListBox*");
+	IDX_LISTBOX_META = lua_gettop(vlist_L);
+	luaL_getmetatable(vlist_L, IMMORTAL_OBJECT_STORE);
+	IDX_LISTBOX_STORE = lua_gettop(vlist_L);
+	luags_pushListBox(vlist_L, listbox, IDX_LISTBOX_META, IDX_LISTBOX_STORE);
+	lua_replace(vlist_L, -3);
+	lua_pop(vlist_L, 1);
+	aux_LuaValueList_seti(ptr, i);
+}
+
+void* ListBox_AsLuaValue(AGS_ListBox* listbox) {
+	int IDX_LISTBOX_META, IDX_LISTBOX_STORE;
+	luaL_getmetatable(vlist_L, "AGS_ListBox*");
+	IDX_LISTBOX_META = lua_gettop(vlist_L);
+	luaL_getmetatable(vlist_L, IMMORTAL_OBJECT_STORE);
+	IDX_LISTBOX_STORE = lua_gettop(vlist_L);
+	luags_pushListBox(vlist_L, listbox, IDX_LISTBOX_META, IDX_LISTBOX_STORE);
+	lua_replace(vlist_L, -3);
+	lua_pop(vlist_L, 1);
+	return aux_LuaValueList_MakeReadOnly();
+}
+
+static void* ListBoxGetLuaField(void* obj, const char* name) {
+	int IDX_META, IDX_STORE;
+	if (!name) {
+		lua_pushnil(vlist_L);
+	}
+	else {
+		luaL_getmetatable(main_L, "AGS_ListBox*");
+		IDX_META = lua_gettop(main_L);
+		luaL_getmetatable(main_L, IMMORTAL_OBJECT_STORE);
+		IDX_STORE = lua_gettop(main_L);
+		luags_pushListBox(main_L, obj, IDX_META, IDX_STORE);
+		lua_replace(main_L, -3);
+		lua_pop(main_L,1);
+		lua_getfield(main_L,-1,name);
+		lua_xmove(main_L,vlist_L,1);
+	}
+	return aux_LuaValueList_Create(1, LUACALL_NONE);
+}
+
+static void ListBoxSetLuaField(void* obj, const char* name, void* newValue) {
+	int IDX_META, IDX_STORE;
+	if (!name) {
+		engine->AbortGame("Cannot set Lua field with \"null\" name");
+		lua_pushnil(vlist_L);
+	}
+	luaL_getmetatable(main_L, "AGS_ListBox*");
+	IDX_META = lua_gettop(main_L);
+	luaL_getmetatable(main_L, IMMORTAL_OBJECT_STORE);
+	IDX_STORE = lua_gettop(main_L);
+	luags_pushListBox(main_L, obj, IDX_META, IDX_STORE);
+	lua_replace(main_L, -3);
+	lua_pop(main_L,1);
+	if (newValue) {
+		lua_pushlightuserdata(vlist_L, newValue);
+		lua_gettable(vlist_L, VLIST_STACK_LISTSTORE);
+		lua_rawgeti(vlist_L, -1, 1);
+		lua_xmove(vlist_L, main_L, 1);
+		lua_pop(vlist_L, 1);
+	}
+	else {
+		lua_pushnil(main_L);
+	}
+	lua_setfield(main_L,-2,name);
+	lua_pop(main_L,1);
+}
+AGS_GUI* Lua_ToGUI(void* ptr) {
+	if (!ptr) {
+		return NULL;
+	}
+	lua_pushlightuserdata(vlist_L, ptr);
+	lua_rawget(vlist_L, VLIST_STACK_LISTSTORE);
+	lua_rawgeti(vlist_L, -1, 1);
+	if (!lua_getmetatable(vlist_L, -1)) {
+		lua_pop(vlist_L, 2);
+		return NULL;
+	}
+	lua_rawget(vlist_L, LUA_REGISTRYINDEX);
+	if (!lua_isstring(vlist_L,-1) || strcmp(lua_tostring(vlist_L,-1), "AGS_GUI*")) {
+		lua_pop(vlist_L,3);
+		return NULL;
+	}
+	AGS_GUI* gui = *(AGS_GUI**)lua_touserdata(vlist_L,-2);
+	lua_pop(vlist_L,3);
+	return gui;
+}
+
+AGS_GUI* LuaValueList_geti_AsGUIs(void* ptr, int n) {
+	AGS_GUI* gui;
+	aux_LuaValueList_geti(ptr, n);
+	if (!lua_getmetatable(vlist_L, -1)) {
+		lua_pop(vlist_L,1);
+		return NULL;
+	}
+	lua_rawget(vlist_L, LUA_REGISTRYINDEX);
+	if (!lua_isstring(vlist_L,-1) || strcmp(lua_tostring(vlist_L,-1), "AGS_GUI*")) {
+		lua_pop(vlist_L,2);
+		return NULL;
+	}
+	gui = *(AGS_GUI**)lua_touserdata(vlist_L,-2);
+	lua_pop(vlist_L,2);
+	return gui;
+}
+void LuaValueList_seti_AsGUIs(void* ptr, int i, AGS_GUI* gui) {
+	int IDX_GUI_META, IDX_GUI_STORE;
+	luaL_getmetatable(vlist_L, "AGS_GUI*");
+	IDX_GUI_META = lua_gettop(vlist_L);
+	luaL_getmetatable(vlist_L, IMMORTAL_OBJECT_STORE);
+	IDX_GUI_STORE = lua_gettop(vlist_L);
+	luags_pushGUI(vlist_L, gui, IDX_GUI_META, IDX_GUI_STORE);
+	lua_replace(vlist_L, -3);
+	lua_pop(vlist_L, 1);
+	aux_LuaValueList_seti(ptr, i);
+}
+
+void* GUI_AsLuaValue(AGS_GUI* gui) {
+	int IDX_GUI_META, IDX_GUI_STORE;
+	luaL_getmetatable(vlist_L, "AGS_GUI*");
+	IDX_GUI_META = lua_gettop(vlist_L);
+	luaL_getmetatable(vlist_L, IMMORTAL_OBJECT_STORE);
+	IDX_GUI_STORE = lua_gettop(vlist_L);
+	luags_pushGUI(vlist_L, gui, IDX_GUI_META, IDX_GUI_STORE);
+	lua_replace(vlist_L, -3);
+	lua_pop(vlist_L, 1);
+	return aux_LuaValueList_MakeReadOnly();
+}
+
+static void* GUIGetLuaField(void* obj, const char* name) {
+	int IDX_META, IDX_STORE;
+	if (!name) {
+		lua_pushnil(vlist_L);
+	}
+	else {
+		luaL_getmetatable(main_L, "AGS_GUI*");
+		IDX_META = lua_gettop(main_L);
+		luaL_getmetatable(main_L, IMMORTAL_OBJECT_STORE);
+		IDX_STORE = lua_gettop(main_L);
+		luags_pushGUI(main_L, obj, IDX_META, IDX_STORE);
+		lua_replace(main_L, -3);
+		lua_pop(main_L,1);
+		lua_getfield(main_L,-1,name);
+		lua_xmove(main_L,vlist_L,1);
+	}
+	return aux_LuaValueList_Create(1, LUACALL_NONE);
+}
+
+static void GUISetLuaField(void* obj, const char* name, void* newValue) {
+	int IDX_META, IDX_STORE;
+	if (!name) {
+		engine->AbortGame("Cannot set Lua field with \"null\" name");
+		lua_pushnil(vlist_L);
+	}
+	luaL_getmetatable(main_L, "AGS_GUI*");
+	IDX_META = lua_gettop(main_L);
+	luaL_getmetatable(main_L, IMMORTAL_OBJECT_STORE);
+	IDX_STORE = lua_gettop(main_L);
+	luags_pushGUI(main_L, obj, IDX_META, IDX_STORE);
+	lua_replace(main_L, -3);
+	lua_pop(main_L,1);
+	if (newValue) {
+		lua_pushlightuserdata(vlist_L, newValue);
+		lua_gettable(vlist_L, VLIST_STACK_LISTSTORE);
+		lua_rawgeti(vlist_L, -1, 1);
+		lua_xmove(vlist_L, main_L, 1);
+		lua_pop(vlist_L, 1);
+	}
+	else {
+		lua_pushnil(main_L);
+	}
+	lua_setfield(main_L,-2,name);
+	lua_pop(main_L,1);
+}
+AGS_Hotspot* Lua_ToHotspot(void* ptr) {
+	if (!ptr) {
+		return NULL;
+	}
+	lua_pushlightuserdata(vlist_L, ptr);
+	lua_rawget(vlist_L, VLIST_STACK_LISTSTORE);
+	lua_rawgeti(vlist_L, -1, 1);
+	if (!lua_getmetatable(vlist_L, -1)) {
+		lua_pop(vlist_L, 2);
+		return NULL;
+	}
+	lua_rawget(vlist_L, LUA_REGISTRYINDEX);
+	if (!lua_isstring(vlist_L,-1) || strcmp(lua_tostring(vlist_L,-1), "AGS_Hotspot*")) {
+		lua_pop(vlist_L,3);
+		return NULL;
+	}
+	AGS_Hotspot* hotspot = *(AGS_Hotspot**)lua_touserdata(vlist_L,-2);
+	lua_pop(vlist_L,3);
+	return hotspot;
+}
+
+AGS_Hotspot* LuaValueList_geti_AsHotspots(void* ptr, int n) {
+	AGS_Hotspot* hotspot;
+	aux_LuaValueList_geti(ptr, n);
+	if (!lua_getmetatable(vlist_L, -1)) {
+		lua_pop(vlist_L,1);
+		return NULL;
+	}
+	lua_rawget(vlist_L, LUA_REGISTRYINDEX);
+	if (!lua_isstring(vlist_L,-1) || strcmp(lua_tostring(vlist_L,-1), "AGS_Hotspot*")) {
+		lua_pop(vlist_L,2);
+		return NULL;
+	}
+	hotspot = *(AGS_Hotspot**)lua_touserdata(vlist_L,-2);
+	lua_pop(vlist_L,2);
+	return hotspot;
+}
+void LuaValueList_seti_AsHotspots(void* ptr, int i, AGS_Hotspot* hotspot) {
+	int IDX_HOTSPOT_META, IDX_HOTSPOT_STORE;
+	luaL_getmetatable(vlist_L, "AGS_Hotspot*");
+	IDX_HOTSPOT_META = lua_gettop(vlist_L);
+	luaL_getmetatable(vlist_L, "AGS_Hotspot* store");
+	IDX_HOTSPOT_STORE = lua_gettop(vlist_L);
+	luags_pushHotspot(vlist_L, hotspot, IDX_HOTSPOT_META, IDX_HOTSPOT_STORE);
+	lua_replace(vlist_L, -3);
+	lua_pop(vlist_L, 1);
+	aux_LuaValueList_seti(ptr, i);
+}
+
+void* Hotspot_AsLuaValue(AGS_Hotspot* hotspot) {
+	int IDX_HOTSPOT_META, IDX_HOTSPOT_STORE;
+	luaL_getmetatable(vlist_L, "AGS_Hotspot*");
+	IDX_HOTSPOT_META = lua_gettop(vlist_L);
+	luaL_getmetatable(vlist_L, "AGS_Hotspot* store");
+	IDX_HOTSPOT_STORE = lua_gettop(vlist_L);
+	luags_pushHotspot(vlist_L, hotspot, IDX_HOTSPOT_META, IDX_HOTSPOT_STORE);
+	lua_replace(vlist_L, -3);
+	lua_pop(vlist_L, 1);
+	return aux_LuaValueList_MakeReadOnly();
+}
+
+static void* HotspotGetLuaField(void* obj, const char* name) {
+	int IDX_META, IDX_STORE;
+	if (!name) {
+		lua_pushnil(vlist_L);
+	}
+	else {
+		luaL_getmetatable(main_L, "AGS_Hotspot*");
+		IDX_META = lua_gettop(main_L);
+		luaL_getmetatable(main_L, "AGS_Hotspot* store");
+		IDX_STORE = lua_gettop(main_L);
+		luags_pushHotspot(main_L, obj, IDX_META, IDX_STORE);
+		lua_replace(main_L, -3);
+		lua_pop(main_L,1);
+		lua_getfield(main_L,-1,name);
+		lua_xmove(main_L,vlist_L,1);
+	}
+	return aux_LuaValueList_Create(1, LUACALL_NONE);
+}
+
+static void HotspotSetLuaField(void* obj, const char* name, void* newValue) {
+	int IDX_META, IDX_STORE;
+	if (!name) {
+		engine->AbortGame("Cannot set Lua field with \"null\" name");
+		lua_pushnil(vlist_L);
+	}
+	luaL_getmetatable(main_L, "AGS_Hotspot*");
+	IDX_META = lua_gettop(main_L);
+	luaL_getmetatable(main_L, "AGS_Hotspot* store");
+	IDX_STORE = lua_gettop(main_L);
+	luags_pushHotspot(main_L, obj, IDX_META, IDX_STORE);
+	lua_replace(main_L, -3);
+	lua_pop(main_L,1);
+	if (newValue) {
+		lua_pushlightuserdata(vlist_L, newValue);
+		lua_gettable(vlist_L, VLIST_STACK_LISTSTORE);
+		lua_rawgeti(vlist_L, -1, 1);
+		lua_xmove(vlist_L, main_L, 1);
+		lua_pop(vlist_L, 1);
+	}
+	else {
+		lua_pushnil(main_L);
+	}
+	lua_setfield(main_L,-2,name);
+	lua_pop(main_L,1);
+}
+
+static void* HotspotLuaMethod(void* obj, const char* name, void* params, int protectedMode) {
+	int IDX_META, IDX_STORE;
+	luaL_getmetatable(main_L, "AGS_Hotspot*");
+	IDX_META = lua_gettop(main_L);
+	luaL_getmetatable(main_L, "AGS_Hotspot* store");
+	IDX_STORE = lua_gettop(main_L);
+	luags_pushHotspot(main_L, obj, IDX_META, IDX_STORE);
+	lua_replace(main_L, -3);
+	lua_pop(main_L,1);
+	int numParams = aux_LuaCall_SetUp_Obj(name, params);
+	if (numParams == -1) {
+		return aux_LuaValueList_Create(0, LUACALL_FUNCNOTFOUND);
+	}
+	return aux_LuaCall_ReturnList(numParams, protectedMode);
+}
+AGS_Region* Lua_ToRegion(void* ptr) {
+	if (!ptr) {
+		return NULL;
+	}
+	lua_pushlightuserdata(vlist_L, ptr);
+	lua_rawget(vlist_L, VLIST_STACK_LISTSTORE);
+	lua_rawgeti(vlist_L, -1, 1);
+	if (!lua_getmetatable(vlist_L, -1)) {
+		lua_pop(vlist_L, 2);
+		return NULL;
+	}
+	lua_rawget(vlist_L, LUA_REGISTRYINDEX);
+	if (!lua_isstring(vlist_L,-1) || strcmp(lua_tostring(vlist_L,-1), "AGS_Region*")) {
+		lua_pop(vlist_L,3);
+		return NULL;
+	}
+	AGS_Region* region = *(AGS_Region**)lua_touserdata(vlist_L,-2);
+	lua_pop(vlist_L,3);
+	return region;
+}
+
+AGS_Region* LuaValueList_geti_AsRegions(void* ptr, int n) {
+	AGS_Region* region;
+	aux_LuaValueList_geti(ptr, n);
+	if (!lua_getmetatable(vlist_L, -1)) {
+		lua_pop(vlist_L,1);
+		return NULL;
+	}
+	lua_rawget(vlist_L, LUA_REGISTRYINDEX);
+	if (!lua_isstring(vlist_L,-1) || strcmp(lua_tostring(vlist_L,-1), "AGS_Region*")) {
+		lua_pop(vlist_L,2);
+		return NULL;
+	}
+	region = *(AGS_Region**)lua_touserdata(vlist_L,-2);
+	lua_pop(vlist_L,2);
+	return region;
+}
+void LuaValueList_seti_AsRegions(void* ptr, int i, AGS_Region* region) {
+	int IDX_REGION_META, IDX_REGION_STORE;
+	luaL_getmetatable(vlist_L, "AGS_Region*");
+	IDX_REGION_META = lua_gettop(vlist_L);
+	luaL_getmetatable(vlist_L, "AGS_Region* store");
+	IDX_REGION_STORE = lua_gettop(vlist_L);
+	luags_pushRegion(vlist_L, region, IDX_REGION_META, IDX_REGION_STORE);
+	lua_replace(vlist_L, -3);
+	lua_pop(vlist_L, 1);
+	aux_LuaValueList_seti(ptr, i);
+}
+
+void* Region_AsLuaValue(AGS_Region* region) {
+	int IDX_REGION_META, IDX_REGION_STORE;
+	luaL_getmetatable(vlist_L, "AGS_Region*");
+	IDX_REGION_META = lua_gettop(vlist_L);
+	luaL_getmetatable(vlist_L, "AGS_Region* store");
+	IDX_REGION_STORE = lua_gettop(vlist_L);
+	luags_pushRegion(vlist_L, region, IDX_REGION_META, IDX_REGION_STORE);
+	lua_replace(vlist_L, -3);
+	lua_pop(vlist_L, 1);
+	return aux_LuaValueList_MakeReadOnly();
+}
+
+static void* RegionGetLuaField(void* obj, const char* name) {
+	int IDX_META, IDX_STORE;
+	if (!name) {
+		lua_pushnil(vlist_L);
+	}
+	else {
+		luaL_getmetatable(main_L, "AGS_Region*");
+		IDX_META = lua_gettop(main_L);
+		luaL_getmetatable(main_L, "AGS_Region* store");
+		IDX_STORE = lua_gettop(main_L);
+		luags_pushRegion(main_L, obj, IDX_META, IDX_STORE);
+		lua_replace(main_L, -3);
+		lua_pop(main_L,1);
+		lua_getfield(main_L,-1,name);
+		lua_xmove(main_L,vlist_L,1);
+	}
+	return aux_LuaValueList_Create(1, LUACALL_NONE);
+}
+
+static void RegionSetLuaField(void* obj, const char* name, void* newValue) {
+	int IDX_META, IDX_STORE;
+	if (!name) {
+		engine->AbortGame("Cannot set Lua field with \"null\" name");
+		lua_pushnil(vlist_L);
+	}
+	luaL_getmetatable(main_L, "AGS_Region*");
+	IDX_META = lua_gettop(main_L);
+	luaL_getmetatable(main_L, "AGS_Region* store");
+	IDX_STORE = lua_gettop(main_L);
+	luags_pushRegion(main_L, obj, IDX_META, IDX_STORE);
+	lua_replace(main_L, -3);
+	lua_pop(main_L,1);
+	if (newValue) {
+		lua_pushlightuserdata(vlist_L, newValue);
+		lua_gettable(vlist_L, VLIST_STACK_LISTSTORE);
+		lua_rawgeti(vlist_L, -1, 1);
+		lua_xmove(vlist_L, main_L, 1);
+		lua_pop(vlist_L, 1);
+	}
+	else {
+		lua_pushnil(main_L);
+	}
+	lua_setfield(main_L,-2,name);
+	lua_pop(main_L,1);
+}
+
+static void* RegionLuaMethod(void* obj, const char* name, void* params, int protectedMode) {
+	int IDX_META, IDX_STORE;
+	luaL_getmetatable(main_L, "AGS_Region*");
+	IDX_META = lua_gettop(main_L);
+	luaL_getmetatable(main_L, "AGS_Region* store");
+	IDX_STORE = lua_gettop(main_L);
+	luags_pushRegion(main_L, obj, IDX_META, IDX_STORE);
+	lua_replace(main_L, -3);
+	lua_pop(main_L,1);
+	int numParams = aux_LuaCall_SetUp_Obj(name, params);
+	if (numParams == -1) {
+		return aux_LuaValueList_Create(0, LUACALL_FUNCNOTFOUND);
+	}
+	return aux_LuaCall_ReturnList(numParams, protectedMode);
+}
+AGS_Dialog* Lua_ToDialog(void* ptr) {
+	if (!ptr) {
+		return NULL;
+	}
+	lua_pushlightuserdata(vlist_L, ptr);
+	lua_rawget(vlist_L, VLIST_STACK_LISTSTORE);
+	lua_rawgeti(vlist_L, -1, 1);
+	if (!lua_getmetatable(vlist_L, -1)) {
+		lua_pop(vlist_L, 2);
+		return NULL;
+	}
+	lua_rawget(vlist_L, LUA_REGISTRYINDEX);
+	if (!lua_isstring(vlist_L,-1) || strcmp(lua_tostring(vlist_L,-1), "AGS_Dialog*")) {
+		lua_pop(vlist_L,3);
+		return NULL;
+	}
+	AGS_Dialog* dialog = *(AGS_Dialog**)lua_touserdata(vlist_L,-2);
+	lua_pop(vlist_L,3);
+	return dialog;
+}
+
+AGS_Dialog* LuaValueList_geti_AsDialogs(void* ptr, int n) {
+	AGS_Dialog* dialog;
+	aux_LuaValueList_geti(ptr, n);
+	if (!lua_getmetatable(vlist_L, -1)) {
+		lua_pop(vlist_L,1);
+		return NULL;
+	}
+	lua_rawget(vlist_L, LUA_REGISTRYINDEX);
+	if (!lua_isstring(vlist_L,-1) || strcmp(lua_tostring(vlist_L,-1), "AGS_Dialog*")) {
+		lua_pop(vlist_L,2);
+		return NULL;
+	}
+	dialog = *(AGS_Dialog**)lua_touserdata(vlist_L,-2);
+	lua_pop(vlist_L,2);
+	return dialog;
+}
+void LuaValueList_seti_AsDialogs(void* ptr, int i, AGS_Dialog* dialog) {
+	int IDX_DIALOG_META, IDX_DIALOG_STORE;
+	luaL_getmetatable(vlist_L, "AGS_Dialog*");
+	IDX_DIALOG_META = lua_gettop(vlist_L);
+	luaL_getmetatable(vlist_L, IMMORTAL_OBJECT_STORE);
+	IDX_DIALOG_STORE = lua_gettop(vlist_L);
+	luags_pushDialog(vlist_L, dialog, IDX_DIALOG_META, IDX_DIALOG_STORE);
+	lua_replace(vlist_L, -3);
+	lua_pop(vlist_L, 1);
+	aux_LuaValueList_seti(ptr, i);
+}
+
+void* Dialog_AsLuaValue(AGS_Dialog* dialog) {
+	int IDX_DIALOG_META, IDX_DIALOG_STORE;
+	luaL_getmetatable(vlist_L, "AGS_Dialog*");
+	IDX_DIALOG_META = lua_gettop(vlist_L);
+	luaL_getmetatable(vlist_L, IMMORTAL_OBJECT_STORE);
+	IDX_DIALOG_STORE = lua_gettop(vlist_L);
+	luags_pushDialog(vlist_L, dialog, IDX_DIALOG_META, IDX_DIALOG_STORE);
+	lua_replace(vlist_L, -3);
+	lua_pop(vlist_L, 1);
+	return aux_LuaValueList_MakeReadOnly();
+}
+
+static void* DialogGetLuaField(void* obj, const char* name) {
+	int IDX_META, IDX_STORE;
+	if (!name) {
+		lua_pushnil(vlist_L);
+	}
+	else {
+		luaL_getmetatable(main_L, "AGS_Dialog*");
+		IDX_META = lua_gettop(main_L);
+		luaL_getmetatable(main_L, IMMORTAL_OBJECT_STORE);
+		IDX_STORE = lua_gettop(main_L);
+		luags_pushDialog(main_L, obj, IDX_META, IDX_STORE);
+		lua_replace(main_L, -3);
+		lua_pop(main_L,1);
+		lua_getfield(main_L,-1,name);
+		lua_xmove(main_L,vlist_L,1);
+	}
+	return aux_LuaValueList_Create(1, LUACALL_NONE);
+}
+
+static void DialogSetLuaField(void* obj, const char* name, void* newValue) {
+	int IDX_META, IDX_STORE;
+	if (!name) {
+		engine->AbortGame("Cannot set Lua field with \"null\" name");
+		lua_pushnil(vlist_L);
+	}
+	luaL_getmetatable(main_L, "AGS_Dialog*");
+	IDX_META = lua_gettop(main_L);
+	luaL_getmetatable(main_L, IMMORTAL_OBJECT_STORE);
+	IDX_STORE = lua_gettop(main_L);
+	luags_pushDialog(main_L, obj, IDX_META, IDX_STORE);
+	lua_replace(main_L, -3);
+	lua_pop(main_L,1);
+	if (newValue) {
+		lua_pushlightuserdata(vlist_L, newValue);
+		lua_gettable(vlist_L, VLIST_STACK_LISTSTORE);
+		lua_rawgeti(vlist_L, -1, 1);
+		lua_xmove(vlist_L, main_L, 1);
+		lua_pop(vlist_L, 1);
+	}
+	else {
+		lua_pushnil(main_L);
+	}
+	lua_setfield(main_L,-2,name);
+	lua_pop(main_L,1);
+}
+AGS_DateTime* Lua_ToDateTime(void* ptr) {
+	if (!ptr) {
+		return NULL;
+	}
+	lua_pushlightuserdata(vlist_L, ptr);
+	lua_rawget(vlist_L, VLIST_STACK_LISTSTORE);
+	lua_rawgeti(vlist_L, -1, 1);
+	if (!lua_getmetatable(vlist_L, -1)) {
+		lua_pop(vlist_L, 2);
+		return NULL;
+	}
+	lua_rawget(vlist_L, LUA_REGISTRYINDEX);
+	if (!lua_isstring(vlist_L,-1) || strcmp(lua_tostring(vlist_L,-1), "AGS_DateTime*")) {
+		lua_pop(vlist_L,3);
+		return NULL;
+	}
+	AGS_DateTime* datetime = *(AGS_DateTime**)lua_touserdata(vlist_L,-2);
+	lua_pop(vlist_L,3);
+	return datetime;
+}
+
+AGS_DateTime* LuaValueList_geti_AsDateTimes(void* ptr, int n) {
+	AGS_DateTime* datetime;
+	aux_LuaValueList_geti(ptr, n);
+	if (!lua_getmetatable(vlist_L, -1)) {
+		lua_pop(vlist_L,1);
+		return NULL;
+	}
+	lua_rawget(vlist_L, LUA_REGISTRYINDEX);
+	if (!lua_isstring(vlist_L,-1) || strcmp(lua_tostring(vlist_L,-1), "AGS_DateTime*")) {
+		lua_pop(vlist_L,2);
+		return NULL;
+	}
+	datetime = *(AGS_DateTime**)lua_touserdata(vlist_L,-2);
+	lua_pop(vlist_L,2);
+	return datetime;
+}
+void LuaValueList_seti_AsDateTimes(void* ptr, int i, AGS_DateTime* datetime) {
+	int IDX_DATETIME_META, IDX_DATETIME_STORE;
+	luaL_getmetatable(vlist_L, "AGS_DateTime*");
+	IDX_DATETIME_META = lua_gettop(vlist_L);
+	luaL_getmetatable(vlist_L, "AGS_DateTime* store");
+	IDX_DATETIME_STORE = lua_gettop(vlist_L);
+	luags_pushDateTime(vlist_L, datetime, IDX_DATETIME_META, IDX_DATETIME_STORE);
+	lua_replace(vlist_L, -3);
+	lua_pop(vlist_L, 1);
+	aux_LuaValueList_seti(ptr, i);
+}
+
+void* DateTime_AsLuaValue(AGS_DateTime* datetime) {
+	int IDX_DATETIME_META, IDX_DATETIME_STORE;
+	luaL_getmetatable(vlist_L, "AGS_DateTime*");
+	IDX_DATETIME_META = lua_gettop(vlist_L);
+	luaL_getmetatable(vlist_L, "AGS_DateTime* store");
+	IDX_DATETIME_STORE = lua_gettop(vlist_L);
+	luags_pushDateTime(vlist_L, datetime, IDX_DATETIME_META, IDX_DATETIME_STORE);
+	lua_replace(vlist_L, -3);
+	lua_pop(vlist_L, 1);
+	return aux_LuaValueList_MakeReadOnly();
+}
+AGS_AudioChannel* Lua_ToAudioChannel(void* ptr) {
+	if (!ptr) {
+		return NULL;
+	}
+	lua_pushlightuserdata(vlist_L, ptr);
+	lua_rawget(vlist_L, VLIST_STACK_LISTSTORE);
+	lua_rawgeti(vlist_L, -1, 1);
+	if (!lua_getmetatable(vlist_L, -1)) {
+		lua_pop(vlist_L, 2);
+		return NULL;
+	}
+	lua_rawget(vlist_L, LUA_REGISTRYINDEX);
+	if (!lua_isstring(vlist_L,-1) || strcmp(lua_tostring(vlist_L,-1), "AGS_AudioChannel*")) {
+		lua_pop(vlist_L,3);
+		return NULL;
+	}
+	AGS_AudioChannel* audiochannel = *(AGS_AudioChannel**)lua_touserdata(vlist_L,-2);
+	lua_pop(vlist_L,3);
+	return audiochannel;
+}
+
+AGS_AudioChannel* LuaValueList_geti_AsAudioChannels(void* ptr, int n) {
+	AGS_AudioChannel* audiochannel;
+	aux_LuaValueList_geti(ptr, n);
+	if (!lua_getmetatable(vlist_L, -1)) {
+		lua_pop(vlist_L,1);
+		return NULL;
+	}
+	lua_rawget(vlist_L, LUA_REGISTRYINDEX);
+	if (!lua_isstring(vlist_L,-1) || strcmp(lua_tostring(vlist_L,-1), "AGS_AudioChannel*")) {
+		lua_pop(vlist_L,2);
+		return NULL;
+	}
+	audiochannel = *(AGS_AudioChannel**)lua_touserdata(vlist_L,-2);
+	lua_pop(vlist_L,2);
+	return audiochannel;
+}
+void LuaValueList_seti_AsAudioChannels(void* ptr, int i, AGS_AudioChannel* audiochannel) {
+	int IDX_AUDIOCHANNEL_META, IDX_AUDIOCHANNEL_STORE;
+	luaL_getmetatable(vlist_L, "AGS_AudioChannel*");
+	IDX_AUDIOCHANNEL_META = lua_gettop(vlist_L);
+	luaL_getmetatable(vlist_L, "AGS_AudioChannel* store");
+	IDX_AUDIOCHANNEL_STORE = lua_gettop(vlist_L);
+	luags_pushAudioChannel(vlist_L, audiochannel, IDX_AUDIOCHANNEL_META, IDX_AUDIOCHANNEL_STORE);
+	lua_replace(vlist_L, -3);
+	lua_pop(vlist_L, 1);
+	aux_LuaValueList_seti(ptr, i);
+}
+
+void* AudioChannel_AsLuaValue(AGS_AudioChannel* audiochannel) {
+	int IDX_AUDIOCHANNEL_META, IDX_AUDIOCHANNEL_STORE;
+	luaL_getmetatable(vlist_L, "AGS_AudioChannel*");
+	IDX_AUDIOCHANNEL_META = lua_gettop(vlist_L);
+	luaL_getmetatable(vlist_L, "AGS_AudioChannel* store");
+	IDX_AUDIOCHANNEL_STORE = lua_gettop(vlist_L);
+	luags_pushAudioChannel(vlist_L, audiochannel, IDX_AUDIOCHANNEL_META, IDX_AUDIOCHANNEL_STORE);
+	lua_replace(vlist_L, -3);
+	lua_pop(vlist_L, 1);
+	return aux_LuaValueList_MakeReadOnly();
+}
+AGS_AudioClip* Lua_ToAudioClip(void* ptr) {
+	if (!ptr) {
+		return NULL;
+	}
+	lua_pushlightuserdata(vlist_L, ptr);
+	lua_rawget(vlist_L, VLIST_STACK_LISTSTORE);
+	lua_rawgeti(vlist_L, -1, 1);
+	if (!lua_getmetatable(vlist_L, -1)) {
+		lua_pop(vlist_L, 2);
+		return NULL;
+	}
+	lua_rawget(vlist_L, LUA_REGISTRYINDEX);
+	if (!lua_isstring(vlist_L,-1) || strcmp(lua_tostring(vlist_L,-1), "AGS_AudioClip*")) {
+		lua_pop(vlist_L,3);
+		return NULL;
+	}
+	AGS_AudioClip* audioclip = *(AGS_AudioClip**)lua_touserdata(vlist_L,-2);
+	lua_pop(vlist_L,3);
+	return audioclip;
+}
+
+AGS_AudioClip* LuaValueList_geti_AsAudioClips(void* ptr, int n) {
+	AGS_AudioClip* audioclip;
+	aux_LuaValueList_geti(ptr, n);
+	if (!lua_getmetatable(vlist_L, -1)) {
+		lua_pop(vlist_L,1);
+		return NULL;
+	}
+	lua_rawget(vlist_L, LUA_REGISTRYINDEX);
+	if (!lua_isstring(vlist_L,-1) || strcmp(lua_tostring(vlist_L,-1), "AGS_AudioClip*")) {
+		lua_pop(vlist_L,2);
+		return NULL;
+	}
+	audioclip = *(AGS_AudioClip**)lua_touserdata(vlist_L,-2);
+	lua_pop(vlist_L,2);
+	return audioclip;
+}
+void LuaValueList_seti_AsAudioClips(void* ptr, int i, AGS_AudioClip* audioclip) {
+	int IDX_AUDIOCLIP_META, IDX_AUDIOCLIP_STORE;
+	luaL_getmetatable(vlist_L, "AGS_AudioClip*");
+	IDX_AUDIOCLIP_META = lua_gettop(vlist_L);
+	luaL_getmetatable(vlist_L, IMMORTAL_OBJECT_STORE);
+	IDX_AUDIOCLIP_STORE = lua_gettop(vlist_L);
+	luags_pushAudioClip(vlist_L, audioclip, IDX_AUDIOCLIP_META, IDX_AUDIOCLIP_STORE);
+	lua_replace(vlist_L, -3);
+	lua_pop(vlist_L, 1);
+	aux_LuaValueList_seti(ptr, i);
+}
+
+void* AudioClip_AsLuaValue(AGS_AudioClip* audioclip) {
+	int IDX_AUDIOCLIP_META, IDX_AUDIOCLIP_STORE;
+	luaL_getmetatable(vlist_L, "AGS_AudioClip*");
+	IDX_AUDIOCLIP_META = lua_gettop(vlist_L);
+	luaL_getmetatable(vlist_L, IMMORTAL_OBJECT_STORE);
+	IDX_AUDIOCLIP_STORE = lua_gettop(vlist_L);
+	luags_pushAudioClip(vlist_L, audioclip, IDX_AUDIOCLIP_META, IDX_AUDIOCLIP_STORE);
+	lua_replace(vlist_L, -3);
+	lua_pop(vlist_L, 1);
+	return aux_LuaValueList_MakeReadOnly();
+}
+
+static void* AudioClipGetLuaField(void* obj, const char* name) {
+	int IDX_META, IDX_STORE;
+	if (!name) {
+		lua_pushnil(vlist_L);
+	}
+	else {
+		luaL_getmetatable(main_L, "AGS_AudioClip*");
+		IDX_META = lua_gettop(main_L);
+		luaL_getmetatable(main_L, IMMORTAL_OBJECT_STORE);
+		IDX_STORE = lua_gettop(main_L);
+		luags_pushAudioClip(main_L, obj, IDX_META, IDX_STORE);
+		lua_replace(main_L, -3);
+		lua_pop(main_L,1);
+		lua_getfield(main_L,-1,name);
+		lua_xmove(main_L,vlist_L,1);
+	}
+	return aux_LuaValueList_Create(1, LUACALL_NONE);
+}
+
+static void AudioClipSetLuaField(void* obj, const char* name, void* newValue) {
+	int IDX_META, IDX_STORE;
+	if (!name) {
+		engine->AbortGame("Cannot set Lua field with \"null\" name");
+		lua_pushnil(vlist_L);
+	}
+	luaL_getmetatable(main_L, "AGS_AudioClip*");
+	IDX_META = lua_gettop(main_L);
+	luaL_getmetatable(main_L, IMMORTAL_OBJECT_STORE);
+	IDX_STORE = lua_gettop(main_L);
+	luags_pushAudioClip(main_L, obj, IDX_META, IDX_STORE);
+	lua_replace(main_L, -3);
+	lua_pop(main_L,1);
+	if (newValue) {
+		lua_pushlightuserdata(vlist_L, newValue);
+		lua_gettable(vlist_L, VLIST_STACK_LISTSTORE);
+		lua_rawgeti(vlist_L, -1, 1);
+		lua_xmove(vlist_L, main_L, 1);
+		lua_pop(vlist_L, 1);
+	}
+	else {
+		lua_pushnil(main_L);
+	}
+	lua_setfield(main_L,-2,name);
+	lua_pop(main_L,1);
+}
+AGS_Object* Lua_ToObject(void* ptr) {
+	if (!ptr) {
+		return NULL;
+	}
+	lua_pushlightuserdata(vlist_L, ptr);
+	lua_rawget(vlist_L, VLIST_STACK_LISTSTORE);
+	lua_rawgeti(vlist_L, -1, 1);
+	if (!lua_getmetatable(vlist_L, -1)) {
+		lua_pop(vlist_L, 2);
+		return NULL;
+	}
+	lua_rawget(vlist_L, LUA_REGISTRYINDEX);
+	if (!lua_isstring(vlist_L,-1) || strcmp(lua_tostring(vlist_L,-1), "AGS_Object*")) {
+		lua_pop(vlist_L,3);
+		return NULL;
+	}
+	AGS_Object* object = *(AGS_Object**)lua_touserdata(vlist_L,-2);
+	lua_pop(vlist_L,3);
+	return object;
+}
+
+AGS_Object* LuaValueList_geti_AsObjects(void* ptr, int n) {
+	AGS_Object* object;
+	aux_LuaValueList_geti(ptr, n);
+	if (!lua_getmetatable(vlist_L, -1)) {
+		lua_pop(vlist_L,1);
+		return NULL;
+	}
+	lua_rawget(vlist_L, LUA_REGISTRYINDEX);
+	if (!lua_isstring(vlist_L,-1) || strcmp(lua_tostring(vlist_L,-1), "AGS_Object*")) {
+		lua_pop(vlist_L,2);
+		return NULL;
+	}
+	object = *(AGS_Object**)lua_touserdata(vlist_L,-2);
+	lua_pop(vlist_L,2);
+	return object;
+}
+void LuaValueList_seti_AsObjects(void* ptr, int i, AGS_Object* object) {
+	int IDX_OBJECT_META, IDX_OBJECT_STORE;
+	luaL_getmetatable(vlist_L, "AGS_Object*");
+	IDX_OBJECT_META = lua_gettop(vlist_L);
+	luaL_getmetatable(vlist_L, "AGS_Object* store");
+	IDX_OBJECT_STORE = lua_gettop(vlist_L);
+	luags_pushObject(vlist_L, object, IDX_OBJECT_META, IDX_OBJECT_STORE);
+	lua_replace(vlist_L, -3);
+	lua_pop(vlist_L, 1);
+	aux_LuaValueList_seti(ptr, i);
+}
+
+void* Object_AsLuaValue(AGS_Object* object) {
+	int IDX_OBJECT_META, IDX_OBJECT_STORE;
+	luaL_getmetatable(vlist_L, "AGS_Object*");
+	IDX_OBJECT_META = lua_gettop(vlist_L);
+	luaL_getmetatable(vlist_L, "AGS_Object* store");
+	IDX_OBJECT_STORE = lua_gettop(vlist_L);
+	luags_pushObject(vlist_L, object, IDX_OBJECT_META, IDX_OBJECT_STORE);
+	lua_replace(vlist_L, -3);
+	lua_pop(vlist_L, 1);
+	return aux_LuaValueList_MakeReadOnly();
+}
+
+static void* ObjectGetLuaField(void* obj, const char* name) {
+	int IDX_META, IDX_STORE;
+	if (!name) {
+		lua_pushnil(vlist_L);
+	}
+	else {
+		luaL_getmetatable(main_L, "AGS_Object*");
+		IDX_META = lua_gettop(main_L);
+		luaL_getmetatable(main_L, "AGS_Object* store");
+		IDX_STORE = lua_gettop(main_L);
+		luags_pushObject(main_L, obj, IDX_META, IDX_STORE);
+		lua_replace(main_L, -3);
+		lua_pop(main_L,1);
+		lua_getfield(main_L,-1,name);
+		lua_xmove(main_L,vlist_L,1);
+	}
+	return aux_LuaValueList_Create(1, LUACALL_NONE);
+}
+
+static void ObjectSetLuaField(void* obj, const char* name, void* newValue) {
+	int IDX_META, IDX_STORE;
+	if (!name) {
+		engine->AbortGame("Cannot set Lua field with \"null\" name");
+		lua_pushnil(vlist_L);
+	}
+	luaL_getmetatable(main_L, "AGS_Object*");
+	IDX_META = lua_gettop(main_L);
+	luaL_getmetatable(main_L, "AGS_Object* store");
+	IDX_STORE = lua_gettop(main_L);
+	luags_pushObject(main_L, obj, IDX_META, IDX_STORE);
+	lua_replace(main_L, -3);
+	lua_pop(main_L,1);
+	if (newValue) {
+		lua_pushlightuserdata(vlist_L, newValue);
+		lua_gettable(vlist_L, VLIST_STACK_LISTSTORE);
+		lua_rawgeti(vlist_L, -1, 1);
+		lua_xmove(vlist_L, main_L, 1);
+		lua_pop(vlist_L, 1);
+	}
+	else {
+		lua_pushnil(main_L);
+	}
+	lua_setfield(main_L,-2,name);
+	lua_pop(main_L,1);
+}
+
+static void* ObjectLuaMethod(void* obj, const char* name, void* params, int protectedMode) {
+	int IDX_META, IDX_STORE;
+	luaL_getmetatable(main_L, "AGS_Object*");
+	IDX_META = lua_gettop(main_L);
+	luaL_getmetatable(main_L, "AGS_Object* store");
+	IDX_STORE = lua_gettop(main_L);
+	luags_pushObject(main_L, obj, IDX_META, IDX_STORE);
+	lua_replace(main_L, -3);
+	lua_pop(main_L,1);
+	int numParams = aux_LuaCall_SetUp_Obj(name, params);
+	if (numParams == -1) {
+		return aux_LuaValueList_Create(0, LUACALL_FUNCNOTFOUND);
+	}
+	return aux_LuaCall_ReturnList(numParams, protectedMode);
+}
+AGS_Character* Lua_ToCharacter(void* ptr) {
+	if (!ptr) {
+		return NULL;
+	}
+	lua_pushlightuserdata(vlist_L, ptr);
+	lua_rawget(vlist_L, VLIST_STACK_LISTSTORE);
+	lua_rawgeti(vlist_L, -1, 1);
+	if (!lua_getmetatable(vlist_L, -1)) {
+		lua_pop(vlist_L, 2);
+		return NULL;
+	}
+	lua_rawget(vlist_L, LUA_REGISTRYINDEX);
+	if (!lua_isstring(vlist_L,-1) || strcmp(lua_tostring(vlist_L,-1), "AGS_Character*")) {
+		lua_pop(vlist_L,3);
+		return NULL;
+	}
+	AGS_Character* character = *(AGS_Character**)lua_touserdata(vlist_L,-2);
+	lua_pop(vlist_L,3);
+	return character;
+}
+
+AGS_Character* LuaValueList_geti_AsCharacters(void* ptr, int n) {
+	AGS_Character* character;
+	aux_LuaValueList_geti(ptr, n);
+	if (!lua_getmetatable(vlist_L, -1)) {
+		lua_pop(vlist_L,1);
+		return NULL;
+	}
+	lua_rawget(vlist_L, LUA_REGISTRYINDEX);
+	if (!lua_isstring(vlist_L,-1) || strcmp(lua_tostring(vlist_L,-1), "AGS_Character*")) {
+		lua_pop(vlist_L,2);
+		return NULL;
+	}
+	character = *(AGS_Character**)lua_touserdata(vlist_L,-2);
+	lua_pop(vlist_L,2);
+	return character;
+}
+void LuaValueList_seti_AsCharacters(void* ptr, int i, AGS_Character* character) {
+	int IDX_CHARACTER_META, IDX_CHARACTER_STORE;
+	luaL_getmetatable(vlist_L, "AGS_Character*");
+	IDX_CHARACTER_META = lua_gettop(vlist_L);
+	luaL_getmetatable(vlist_L, IMMORTAL_OBJECT_STORE);
+	IDX_CHARACTER_STORE = lua_gettop(vlist_L);
+	luags_pushCharacter(vlist_L, character, IDX_CHARACTER_META, IDX_CHARACTER_STORE);
+	lua_replace(vlist_L, -3);
+	lua_pop(vlist_L, 1);
+	aux_LuaValueList_seti(ptr, i);
+}
+
+void* Character_AsLuaValue(AGS_Character* character) {
+	int IDX_CHARACTER_META, IDX_CHARACTER_STORE;
+	luaL_getmetatable(vlist_L, "AGS_Character*");
+	IDX_CHARACTER_META = lua_gettop(vlist_L);
+	luaL_getmetatable(vlist_L, IMMORTAL_OBJECT_STORE);
+	IDX_CHARACTER_STORE = lua_gettop(vlist_L);
+	luags_pushCharacter(vlist_L, character, IDX_CHARACTER_META, IDX_CHARACTER_STORE);
+	lua_replace(vlist_L, -3);
+	lua_pop(vlist_L, 1);
+	return aux_LuaValueList_MakeReadOnly();
+}
+
+static void* CharacterGetLuaField(void* obj, const char* name) {
+	int IDX_META, IDX_STORE;
+	if (!name) {
+		lua_pushnil(vlist_L);
+	}
+	else {
+		luaL_getmetatable(main_L, "AGS_Character*");
+		IDX_META = lua_gettop(main_L);
+		luaL_getmetatable(main_L, IMMORTAL_OBJECT_STORE);
+		IDX_STORE = lua_gettop(main_L);
+		luags_pushCharacter(main_L, obj, IDX_META, IDX_STORE);
+		lua_replace(main_L, -3);
+		lua_pop(main_L,1);
+		lua_getfield(main_L,-1,name);
+		lua_xmove(main_L,vlist_L,1);
+	}
+	return aux_LuaValueList_Create(1, LUACALL_NONE);
+}
+
+static void CharacterSetLuaField(void* obj, const char* name, void* newValue) {
+	int IDX_META, IDX_STORE;
+	if (!name) {
+		engine->AbortGame("Cannot set Lua field with \"null\" name");
+		lua_pushnil(vlist_L);
+	}
+	luaL_getmetatable(main_L, "AGS_Character*");
+	IDX_META = lua_gettop(main_L);
+	luaL_getmetatable(main_L, IMMORTAL_OBJECT_STORE);
+	IDX_STORE = lua_gettop(main_L);
+	luags_pushCharacter(main_L, obj, IDX_META, IDX_STORE);
+	lua_replace(main_L, -3);
+	lua_pop(main_L,1);
+	if (newValue) {
+		lua_pushlightuserdata(vlist_L, newValue);
+		lua_gettable(vlist_L, VLIST_STACK_LISTSTORE);
+		lua_rawgeti(vlist_L, -1, 1);
+		lua_xmove(vlist_L, main_L, 1);
+		lua_pop(vlist_L, 1);
+	}
+	else {
+		lua_pushnil(main_L);
+	}
+	lua_setfield(main_L,-2,name);
+	lua_pop(main_L,1);
+}
+void RegisterLuaInterop(IAGSEngine* engine) {
+	engine->RegisterScriptFunction("Lua::ToViewFrame^1", Lua_ToViewFrame);
+	engine->RegisterScriptFunction("LuaValueList::geti_AsViewFrames", LuaValueList_geti_AsViewFrames);
+	engine->RegisterScriptFunction("LuaValueList::seti_AsViewFrames", LuaValueList_seti_AsViewFrames);
+	engine->RegisterScriptFunction("ViewFrame::AsLuaValue", ViewFrame_AsLuaValue);
+	engine->RegisterScriptFunction("Lua::ToDrawingSurface^1", Lua_ToDrawingSurface);
+	engine->RegisterScriptFunction("LuaValueList::geti_AsDrawingSurfaces", LuaValueList_geti_AsDrawingSurfaces);
+	engine->RegisterScriptFunction("LuaValueList::seti_AsDrawingSurfaces", LuaValueList_seti_AsDrawingSurfaces);
+	engine->RegisterScriptFunction("DrawingSurface::AsLuaValue", DrawingSurface_AsLuaValue);
+	engine->RegisterScriptFunction("Lua::ToFile^1", Lua_ToFile);
+	engine->RegisterScriptFunction("LuaValueList::geti_AsFiles", LuaValueList_geti_AsFiles);
+	engine->RegisterScriptFunction("LuaValueList::seti_AsFiles", LuaValueList_seti_AsFiles);
+	engine->RegisterScriptFunction("File::AsLuaValue", File_AsLuaValue);
+	engine->RegisterScriptFunction("Lua::ToInventoryItem^1", Lua_ToInventoryItem);
+	engine->RegisterScriptFunction("LuaValueList::geti_AsInventoryItems", LuaValueList_geti_AsInventoryItems);
+	engine->RegisterScriptFunction("LuaValueList::seti_AsInventoryItems", LuaValueList_seti_AsInventoryItems);
+	engine->RegisterScriptFunction("InventoryItem::AsLuaValue", InventoryItem_AsLuaValue);
+	engine->RegisterScriptFunction("InventoryItem::LuaMethod", ImmortalLuaMethod);
+	engine->RegisterScriptFunction("InventoryItem::GetLuaField", InventoryItemGetLuaField);
+	engine->RegisterScriptFunction("InventoryItem::SetLuaField", InventoryItemSetLuaField);
+	engine->RegisterScriptFunction("Lua::ToOverlay^1", Lua_ToOverlay);
+	engine->RegisterScriptFunction("LuaValueList::geti_AsOverlays", LuaValueList_geti_AsOverlays);
+	engine->RegisterScriptFunction("LuaValueList::seti_AsOverlays", LuaValueList_seti_AsOverlays);
+	engine->RegisterScriptFunction("Overlay::AsLuaValue", Overlay_AsLuaValue);
+	engine->RegisterScriptFunction("Lua::ToDynamicSprite^1", Lua_ToDynamicSprite);
+	engine->RegisterScriptFunction("LuaValueList::geti_AsDynamicSprites", LuaValueList_geti_AsDynamicSprites);
+	engine->RegisterScriptFunction("LuaValueList::seti_AsDynamicSprites", LuaValueList_seti_AsDynamicSprites);
+	engine->RegisterScriptFunction("DynamicSprite::AsLuaValue", DynamicSprite_AsLuaValue);
+	engine->RegisterScriptFunction("Lua::ToGUIControl^1", Lua_ToGUIControl);
+	engine->RegisterScriptFunction("LuaValueList::geti_AsGUIControls", LuaValueList_geti_AsGUIControls);
+	engine->RegisterScriptFunction("LuaValueList::seti_AsGUIControls", LuaValueList_seti_AsGUIControls);
+	engine->RegisterScriptFunction("GUIControl::AsLuaValue", GUIControl_AsLuaValue);
+	engine->RegisterScriptFunction("GUIControl::GetLuaField", GUIControlGetLuaField);
+	engine->RegisterScriptFunction("GUIControl::SetLuaField", GUIControlSetLuaField);
+	engine->RegisterScriptFunction("Lua::ToLabel^1", Lua_ToLabel);
+	engine->RegisterScriptFunction("LuaValueList::geti_AsLabels", LuaValueList_geti_AsLabels);
+	engine->RegisterScriptFunction("LuaValueList::seti_AsLabels", LuaValueList_seti_AsLabels);
+	engine->RegisterScriptFunction("Label::AsLuaValue", Label_AsLuaValue);
+	engine->RegisterScriptFunction("Label::LuaMethod", ImmortalLuaMethod);
+	engine->RegisterScriptFunction("Label::GetLuaField", LabelGetLuaField);
+	engine->RegisterScriptFunction("Label::SetLuaField", LabelSetLuaField);
+	engine->RegisterScriptFunction("Lua::ToButton^1", Lua_ToButton);
+	engine->RegisterScriptFunction("LuaValueList::geti_AsButtons", LuaValueList_geti_AsButtons);
+	engine->RegisterScriptFunction("LuaValueList::seti_AsButtons", LuaValueList_seti_AsButtons);
+	engine->RegisterScriptFunction("Button::AsLuaValue", Button_AsLuaValue);
+	engine->RegisterScriptFunction("Button::LuaMethod", ImmortalLuaMethod);
+	engine->RegisterScriptFunction("Button::GetLuaField", ButtonGetLuaField);
+	engine->RegisterScriptFunction("Button::SetLuaField", ButtonSetLuaField);
+	engine->RegisterScriptFunction("Lua::ToSlider^1", Lua_ToSlider);
+	engine->RegisterScriptFunction("LuaValueList::geti_AsSliders", LuaValueList_geti_AsSliders);
+	engine->RegisterScriptFunction("LuaValueList::seti_AsSliders", LuaValueList_seti_AsSliders);
+	engine->RegisterScriptFunction("Slider::AsLuaValue", Slider_AsLuaValue);
+	engine->RegisterScriptFunction("Slider::LuaMethod", ImmortalLuaMethod);
+	engine->RegisterScriptFunction("Slider::GetLuaField", SliderGetLuaField);
+	engine->RegisterScriptFunction("Slider::SetLuaField", SliderSetLuaField);
+	engine->RegisterScriptFunction("Lua::ToTextBox^1", Lua_ToTextBox);
+	engine->RegisterScriptFunction("LuaValueList::geti_AsTextBoxes", LuaValueList_geti_AsTextBoxes);
+	engine->RegisterScriptFunction("LuaValueList::seti_AsTextBoxes", LuaValueList_seti_AsTextBoxes);
+	engine->RegisterScriptFunction("TextBox::AsLuaValue", TextBox_AsLuaValue);
+	engine->RegisterScriptFunction("TextBox::LuaMethod", ImmortalLuaMethod);
+	engine->RegisterScriptFunction("TextBox::GetLuaField", TextBoxGetLuaField);
+	engine->RegisterScriptFunction("TextBox::SetLuaField", TextBoxSetLuaField);
+	engine->RegisterScriptFunction("Lua::ToInvWindow^1", Lua_ToInvWindow);
+	engine->RegisterScriptFunction("LuaValueList::geti_AsInvWindows", LuaValueList_geti_AsInvWindows);
+	engine->RegisterScriptFunction("LuaValueList::seti_AsInvWindows", LuaValueList_seti_AsInvWindows);
+	engine->RegisterScriptFunction("InvWindow::AsLuaValue", InvWindow_AsLuaValue);
+	engine->RegisterScriptFunction("InvWindow::LuaMethod", ImmortalLuaMethod);
+	engine->RegisterScriptFunction("InvWindow::GetLuaField", InvWindowGetLuaField);
+	engine->RegisterScriptFunction("InvWindow::SetLuaField", InvWindowSetLuaField);
+	engine->RegisterScriptFunction("Lua::ToListBox^1", Lua_ToListBox);
+	engine->RegisterScriptFunction("LuaValueList::geti_AsListBoxes", LuaValueList_geti_AsListBoxes);
+	engine->RegisterScriptFunction("LuaValueList::seti_AsListBoxes", LuaValueList_seti_AsListBoxes);
+	engine->RegisterScriptFunction("ListBox::AsLuaValue", ListBox_AsLuaValue);
+	engine->RegisterScriptFunction("ListBox::LuaMethod", ImmortalLuaMethod);
+	engine->RegisterScriptFunction("ListBox::GetLuaField", ListBoxGetLuaField);
+	engine->RegisterScriptFunction("ListBox::SetLuaField", ListBoxSetLuaField);
+	engine->RegisterScriptFunction("Lua::ToGUI^1", Lua_ToGUI);
+	engine->RegisterScriptFunction("LuaValueList::geti_AsGUIs", LuaValueList_geti_AsGUIs);
+	engine->RegisterScriptFunction("LuaValueList::seti_AsGUIs", LuaValueList_seti_AsGUIs);
+	engine->RegisterScriptFunction("GUI::AsLuaValue", GUI_AsLuaValue);
+	engine->RegisterScriptFunction("GUI::LuaMethod", ImmortalLuaMethod);
+	engine->RegisterScriptFunction("GUI::GetLuaField", GUIGetLuaField);
+	engine->RegisterScriptFunction("GUI::SetLuaField", GUISetLuaField);
+	engine->RegisterScriptFunction("Lua::ToHotspot^1", Lua_ToHotspot);
+	engine->RegisterScriptFunction("LuaValueList::geti_AsHotspots", LuaValueList_geti_AsHotspots);
+	engine->RegisterScriptFunction("LuaValueList::seti_AsHotspots", LuaValueList_seti_AsHotspots);
+	engine->RegisterScriptFunction("Hotspot::AsLuaValue", Hotspot_AsLuaValue);
+	engine->RegisterScriptFunction("Hotspot::LuaMethod", HotspotLuaMethod);
+	engine->RegisterScriptFunction("Hotspot::GetLuaField", HotspotGetLuaField);
+	engine->RegisterScriptFunction("Hotspot::SetLuaField", HotspotSetLuaField);
+	engine->RegisterScriptFunction("Lua::ToRegion^1", Lua_ToRegion);
+	engine->RegisterScriptFunction("LuaValueList::geti_AsRegions", LuaValueList_geti_AsRegions);
+	engine->RegisterScriptFunction("LuaValueList::seti_AsRegions", LuaValueList_seti_AsRegions);
+	engine->RegisterScriptFunction("Region::AsLuaValue", Region_AsLuaValue);
+	engine->RegisterScriptFunction("Region::LuaMethod", RegionLuaMethod);
+	engine->RegisterScriptFunction("Region::GetLuaField", RegionGetLuaField);
+	engine->RegisterScriptFunction("Region::SetLuaField", RegionSetLuaField);
+	engine->RegisterScriptFunction("Lua::ToDialog^1", Lua_ToDialog);
+	engine->RegisterScriptFunction("LuaValueList::geti_AsDialogs", LuaValueList_geti_AsDialogs);
+	engine->RegisterScriptFunction("LuaValueList::seti_AsDialogs", LuaValueList_seti_AsDialogs);
+	engine->RegisterScriptFunction("Dialog::AsLuaValue", Dialog_AsLuaValue);
+	engine->RegisterScriptFunction("Dialog::LuaMethod", ImmortalLuaMethod);
+	engine->RegisterScriptFunction("Dialog::GetLuaField", DialogGetLuaField);
+	engine->RegisterScriptFunction("Dialog::SetLuaField", DialogSetLuaField);
+	engine->RegisterScriptFunction("Lua::ToDateTime^1", Lua_ToDateTime);
+	engine->RegisterScriptFunction("LuaValueList::geti_AsDateTimes", LuaValueList_geti_AsDateTimes);
+	engine->RegisterScriptFunction("LuaValueList::seti_AsDateTimes", LuaValueList_seti_AsDateTimes);
+	engine->RegisterScriptFunction("DateTime::AsLuaValue", DateTime_AsLuaValue);
+	engine->RegisterScriptFunction("Lua::ToAudioChannel^1", Lua_ToAudioChannel);
+	engine->RegisterScriptFunction("LuaValueList::geti_AsAudioChannels", LuaValueList_geti_AsAudioChannels);
+	engine->RegisterScriptFunction("LuaValueList::seti_AsAudioChannels", LuaValueList_seti_AsAudioChannels);
+	engine->RegisterScriptFunction("AudioChannel::AsLuaValue", AudioChannel_AsLuaValue);
+	engine->RegisterScriptFunction("Lua::ToAudioClip^1", Lua_ToAudioClip);
+	engine->RegisterScriptFunction("LuaValueList::geti_AsAudioClips", LuaValueList_geti_AsAudioClips);
+	engine->RegisterScriptFunction("LuaValueList::seti_AsAudioClips", LuaValueList_seti_AsAudioClips);
+	engine->RegisterScriptFunction("AudioClip::AsLuaValue", AudioClip_AsLuaValue);
+	engine->RegisterScriptFunction("AudioClip::LuaMethod", ImmortalLuaMethod);
+	engine->RegisterScriptFunction("AudioClip::GetLuaField", AudioClipGetLuaField);
+	engine->RegisterScriptFunction("AudioClip::SetLuaField", AudioClipSetLuaField);
+	engine->RegisterScriptFunction("Lua::ToObject^1", Lua_ToObject);
+	engine->RegisterScriptFunction("LuaValueList::geti_AsObjects", LuaValueList_geti_AsObjects);
+	engine->RegisterScriptFunction("LuaValueList::seti_AsObjects", LuaValueList_seti_AsObjects);
+	engine->RegisterScriptFunction("Object::AsLuaValue", Object_AsLuaValue);
+	engine->RegisterScriptFunction("Object::LuaMethod", ObjectLuaMethod);
+	engine->RegisterScriptFunction("Object::GetLuaField", ObjectGetLuaField);
+	engine->RegisterScriptFunction("Object::SetLuaField", ObjectSetLuaField);
+	engine->RegisterScriptFunction("Lua::ToCharacter^1", Lua_ToCharacter);
+	engine->RegisterScriptFunction("LuaValueList::geti_AsCharacters", LuaValueList_geti_AsCharacters);
+	engine->RegisterScriptFunction("LuaValueList::seti_AsCharacters", LuaValueList_seti_AsCharacters);
+	engine->RegisterScriptFunction("Character::AsLuaValue", Character_AsLuaValue);
+	engine->RegisterScriptFunction("Character::LuaMethod", ImmortalLuaMethod);
+	engine->RegisterScriptFunction("Character::GetLuaField", CharacterGetLuaField);
+	engine->RegisterScriptFunction("Character::SetLuaField", CharacterSetLuaField);
+}
