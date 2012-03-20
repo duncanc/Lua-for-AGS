@@ -1,0 +1,173 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.1//EN" "http://www.w3.org/TR/xhtml11/DTD/xhtml11.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+	<head>
+		<title>Lua Library Helper manual</title>
+		<meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
+		<style type='text/css'>
+			body {
+				font-family: sans-serif;
+				font-size: 90%;
+			}
+			h1, h2, h3 {
+				padding: 0;
+				margin: 0;
+			}
+			ul {
+				margin-top: 0;
+				margin-bottom: 0;
+			}
+			.stringfunc {
+				font-weight: bold;
+			}
+			.equivalent {
+				font-size: 90%;
+				font-style: italic;
+			}
+			tt {
+				font-size: 125%;
+			}
+			.code {
+				font-weight: bold;
+				padding: 1px;
+				background: #eeeeee;
+			}
+			hr {
+				border: 0;
+				background: #dddddd;
+			}
+			a {
+				text-decoration: none;
+			}
+			a.external {
+				font-weight: bold;
+			}
+			a:hover {
+				text-decoration: underline;
+			}
+			.note {
+				font-weight: bold;
+				font-variant: small-caps;
+			}
+		</style>
+	</head>
+	<body>
+		<h1>Lua Library Helper</h1>
+		<hr />
+		<h2>Rationale</h2>
+		<p>
+			Lua Library Helper is a C header for developing custom-designed C/C++ bindings.
+			("Custom-designed" is as opposed to automatically-generated bindings such as with tools like tolua++.)
+			It aims to make some powerful patterns easy and quick to reuse without sacrificing performance, or ending up with a lot of longwinded repetitive code.
+		</p>
+		<hr />
+		<h2>Mutable Values</h3>
+		<p>
+			Say that you want to share an upvalue between several C functions, and whenever any of those functions change the value of the upvalue it should be changed
+			for all functions with that upvalue, not just the one that changed it. The most likely recommendation is to choose a suitable key (maybe a light userdata) to
+			store this value in the registry instead of using an upvalue.
+		</p>
+		<p>
+			Lua Library Helper includes an alternate method which involves creating a "mutable"
+			and using custom functions to get and set the value that it holds.
+			(Internally, a mutable is simply a table.)
+		</p>
+		<h3>llh_newmutable (L)</h3>
+		<p>
+			Create a new mutable value and push it onto the stack.
+		</p>
+		<h3>llh_pushmutablevalue (L, idx)</h3>
+		<p>
+			Retrieve the value from the mutable at the given index.
+		</p>
+		<h3>llh_replacemutablevalue (L, idx)</h3>
+		<p>
+			Pop the top value from the stack and set it as the value of the mutable at the given index.
+		</p>
+		<hr />
+		<h2>Integer Constants</h2>
+		<hr />
+		<h2>Converting between Structs and Tables</h2>
+		<p>
+			
+		</p>
+		<h3>llh_struct2table_number (L, pstruct, <i>propname</i>)</h3>
+		<p>
+			Pushes the number value found in the <b><i>(propname)</i></b> field of the struct pointed to by typed pointer <b>pstruct</b>, and sets it
+			as a field of the table on the top of the stack.
+		</p>
+		<p>
+			(Note that <b><i>propname</i></b> should <i>not</i> be a string, but passed unquoted as if it were a variable name.)
+		</p>
+		<h3>llh_struct2table_lightuserdata (L, pstruct, <i>propname</i>)</h3>
+		<p>
+			Similar to <tt>llh_struct2table_number</tt>, except instead of being cast to a <tt>lua_Number</tt> and pushed as a number,
+			the given field is cast to a <tt>void*</tt> pointer and pushed as a light userdata.
+		</p>
+		<h3>llh_struct2table_boolean (L, pstruct, <i>propname</i>)</h3>
+		<p>
+			Similar to <tt>llh_struct2table_number</tt>, except the field is cast to an integer and is pushed as either <tt>false</tt> if
+			the cast value is zero or <tt>true</tt> otherwise.
+		</p>
+		<h3>llh_struct2table_numarray (L, pstruct, <i>propname</i>, length)</h3>
+		<p>
+			Similar to <tt>llh_struct2table_number</tt>, except the field is expected to be a fixed array of numbers. It is pushed
+			as a Lua array table (one-based).
+		</p>
+		<h3>llh_table2struct_checknumber (L, idx, pstruct, <i>propname</i>, <i>NUM_TYPE</i>)</h3>
+		<p>
+			The field <b><i>(propname)</i></b> is fetched from the table at the given index <b>idx</b>.
+			If this value is not a number, an error is raised.
+			Otherwise, the number is cast to <b><i>(NUM_TYPE)</i></b> and assigned to the <b><i>(propname)</i></b> field
+			of the struct pointed to by typed pointer <b>pstruct</b>.
+		</p>
+		<h3>Example</h3>
+		<p>
+			Say that we have a struct:
+		</p>
+		<pre class='code'>
+typedef struct FruitStock {
+    int appleCount;
+    int orangeCount;
+    int bananaCount;
+} FruitStock;
+</pre>
+		<p>
+			In order to create a table containing this field, we could do:
+		</p>
+		<pre class='code'>
+FruitStock fruit;
+fruit.appleCount = 120;
+fruit.orangeCount = 415;
+fruit.bananaCount = 4;
+lua_newtable(L);
+llh_struct2table(L, &fruit, appleCount);
+llh_struct2table(L, &fruit, orangeCount);
+llh_struct2table(L, &fruit, bananaCount);
+</pre>
+		<hr />
+		<h2>Absolute vs. Relative Indexing</h2>
+		<p>
+			Relative indices (e.g. <tt class='code'>-1</tt> to indicate the top value on the stack) are very useful for expressiveness but
+			can be problematic if you are going to be manipulating the stack in complex ways inside the function/macro that is passed the
+			index.
+		</p>
+		<h3>llh_isabsindex (L, idx)</h3>
+		<p>
+			Evaluates to <tt class='code'>1</tt> if the given index is absolute, <tt class='code'>0</tt> otherwise.
+			(This is more complex than simply testing if it is negative, as the virtual indices are also negative.)
+		</p>
+		<h3>llh_toabsindex (L, idx)</h3>
+		<p>
+			Evaluates to an index guaranteed to be both absolute (i.e. not dependant on the size of the stack) and equivalent to the given index.
+		</p>
+		<hr />
+		<h2>Miscellaneous</h2>
+		<p>
+			These macros do not fit into any other section.
+		</p>
+		<h3>llh_iscallable (L, idx)</h3>
+		<p>
+			Evaluates to <tt class='code'>1</tt> if the value at the given index is either a function or has a <tt>__call</tt> metamethod, <tt class='code'>0</tt> otherwise.
+		</p>
+	</body>
+</html>
