@@ -1,0 +1,9 @@
+*.suo
+*.user
+*.dll
+*.lib
+*.exp
+*.dll.config
+*.pdb
+EditorPlugin/bin
+EditorPlugin/obj
