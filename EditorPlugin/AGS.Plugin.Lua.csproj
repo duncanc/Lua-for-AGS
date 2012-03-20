@@ -1,0 +1,201 @@
+﻿<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003" ToolsVersion="3.5">
+  <PropertyGroup>
+    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
+    <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
+    <ProductVersion>9.0.30729</ProductVersion>
+    <SchemaVersion>2.0</SchemaVersion>
+    <ProjectGuid>{C85A89D7-ABBB-4FAC-92F4-E22660DDAC04}</ProjectGuid>
+    <OutputType>Library</OutputType>
+    <AppDesignerFolder>Properties</AppDesignerFolder>
+    <RootNamespace>AGS.Plugin.Lua</RootNamespace>
+    <AssemblyName>AGS.Plugin.Lua</AssemblyName>
+    <FileUpgradeFlags>
+    </FileUpgradeFlags>
+    <OldToolsVersion>2.0</OldToolsVersion>
+    <TargetFrameworkVersion>v2.0</TargetFrameworkVersion>
+    <UpgradeBackupLocation>
+    </UpgradeBackupLocation>
+    <PublishUrl>publish\</PublishUrl>
+    <Install>true</Install>
+    <InstallFrom>Disk</InstallFrom>
+    <UpdateEnabled>false</UpdateEnabled>
+    <UpdateMode>Foreground</UpdateMode>
+    <UpdateInterval>7</UpdateInterval>
+    <UpdateIntervalUnits>Days</UpdateIntervalUnits>
+    <UpdatePeriodically>false</UpdatePeriodically>
+    <UpdateRequired>false</UpdateRequired>
+    <MapFileExtensions>true</MapFileExtensions>
+    <ApplicationRevision>0</ApplicationRevision>
+    <ApplicationVersion>1.0.0.%2a</ApplicationVersion>
+    <IsWebBootstrapper>false</IsWebBootstrapper>
+    <UseApplicationTrust>false</UseApplicationTrust>
+    <BootstrapperEnabled>true</BootstrapperEnabled>
+    <TargetFrameworkSubset>
+    </TargetFrameworkSubset>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
+    <DebugSymbols>true</DebugSymbols>
+    <DebugType>full</DebugType>
+    <Optimize>false</Optimize>
+    <OutputPath>bin\Debug\</OutputPath>
+    <DefineConstants>DEBUG;TRACE</DefineConstants>
+    <ErrorReport>prompt</ErrorReport>
+    <WarningLevel>4</WarningLevel>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
+    <DebugType>pdbonly</DebugType>
+    <Optimize>true</Optimize>
+    <OutputPath>bin\Release\</OutputPath>
+    <DefineConstants>TRACE</DefineConstants>
+    <ErrorReport>prompt</ErrorReport>
+    <WarningLevel>4</WarningLevel>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="AGS.Types, Version=3.2.1.111, Culture=neutral, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>..\AGS3.2.1F3\AGS.Types.dll</HintPath>
+    </Reference>
+    <Reference Include="ScintillaNet, Version=2.0.3543.41231, Culture=neutral, PublicKeyToken=948d6c9751444115, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>C:\SDKs\Scintilla.NET\Source\Branches\2.0\ScintillaNET\bin\Release\ScintillaNet.dll</HintPath>
+    </Reference>
+    <Reference Include="System" />
+    <Reference Include="System.Data" />
+    <Reference Include="System.Drawing" />
+    <Reference Include="System.Windows.Forms" />
+    <Reference Include="System.Xml" />
+    <Reference Include="zlib.net, Version=1.0.3.0, Culture=neutral, PublicKeyToken=47d7877cb3620160">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>C:\SDKs\zlib.NET\zlib.net_104\bin\zlib.net.dll</HintPath>
+    </Reference>
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="CachedRoomInfo.cs" />
+    <Compile Include="CodeConvertPane.cs">
+      <SubType>UserControl</SubType>
+    </Compile>
+    <Compile Include="CodeConvertPane.Designer.cs">
+      <DependentUpon>CodeConvertPane.cs</DependentUpon>
+    </Compile>
+    <Compile Include="HacksAndKludges.cs" />
+    <Compile Include="LuaCodeDom\LuaCodeDocument.cs" />
+    <Compile Include="LuaDotNetProxy.cs" />
+    <Compile Include="SimpleLuaValueEditor.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="SimpleLuaValueEditor.Designer.cs">
+      <DependentUpon>SimpleLuaValueEditor.cs</DependentUpon>
+    </Compile>
+    <Compile Include="IAGSEventReceiver.cs" />
+    <Compile Include="InvokeLua.cs" />
+    <Compile Include="InvokeRunTimePlugin.cs" />
+    <Compile Include="LuaForAGSEditorComponent.cs" />
+    <Compile Include="LuaScriptEditPane.cs">
+      <SubType>UserControl</SubType>
+    </Compile>
+    <Compile Include="LuaScriptEditPane.Designer.cs">
+      <DependentUpon>LuaScriptEditPane.cs</DependentUpon>
+    </Compile>
+    <Compile Include="LuaPlugin.cs" />
+    <Compile Include="LuaScriptFileInfo.cs" />
+    <Compile Include="LuaScriptFolderInfo.cs" />
+    <Compile Include="CreateOrRenameDialog.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="CreateOrRenameDialog.Designer.cs">
+      <DependentUpon>CreateOrRenameDialog.cs</DependentUpon>
+    </Compile>
+    <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="ResourceManager.cs" />
+    <Compile Include="LuaVisualValue.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <Service Include="{B4F97281-0DBD-4835-9ED8-7DFB966E87FF}" />
+  </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="LuaScriptEditPane.resx">
+      <SubType>Designer</SubType>
+      <DependentUpon>LuaScriptEditPane.cs</DependentUpon>
+    </EmbeddedResource>
+  </ItemGroup>
+  <ItemGroup>
+    <BootstrapperPackage Include="Microsoft.Net.Client.3.5">
+      <Visible>False</Visible>
+      <ProductName>.NET Framework Client Profile</ProductName>
+      <Install>false</Install>
+    </BootstrapperPackage>
+    <BootstrapperPackage Include="Microsoft.Net.Framework.2.0">
+      <Visible>False</Visible>
+      <ProductName>.NET Framework 2.0 %28x86%29</ProductName>
+      <Install>false</Install>
+    </BootstrapperPackage>
+    <BootstrapperPackage Include="Microsoft.Net.Framework.3.0">
+      <Visible>False</Visible>
+      <ProductName>.NET Framework 3.0 %28x86%29</ProductName>
+      <Install>false</Install>
+    </BootstrapperPackage>
+    <BootstrapperPackage Include="Microsoft.Net.Framework.3.5">
+      <Visible>False</Visible>
+      <ProductName>.NET Framework 3.5</ProductName>
+      <Install>false</Install>
+    </BootstrapperPackage>
+    <BootstrapperPackage Include="Microsoft.Net.Framework.3.5.SP1">
+      <Visible>False</Visible>
+      <ProductName>.NET Framework 3.5 SP1</ProductName>
+      <Install>true</Install>
+    </BootstrapperPackage>
+    <BootstrapperPackage Include="Microsoft.Windows.Installer.3.1">
+      <Visible>False</Visible>
+      <ProductName>Windows Installer 3.1</ProductName>
+      <Install>true</Install>
+    </BootstrapperPackage>
+  </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="lua.ico" />
+    <EmbeddedResource Include="CreateOrRenameDialog.resx">
+      <DependentUpon>CreateOrRenameDialog.cs</DependentUpon>
+    </EmbeddedResource>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="app.config" />
+    <EmbeddedResource Include="table.xpm" />
+  </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="luagrey.ico" />
+  </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="cog.ico" />
+  </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="CodeConvertPane.resx">
+      <DependentUpon>CodeConvertPane.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="contrast.ico" />
+    <EmbeddedResource Include="SimpleLuaValueEditor.resx">
+      <DependentUpon>SimpleLuaValueEditor.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="empty.ico" />
+    <EmbeddedResource Include="page_white_lightning.ico" />
+    <EmbeddedResource Include="table.ico" />
+    <EmbeddedResource Include="textfield.ico" />
+    <EmbeddedResource Include="world.ico" />
+    <EmbeddedResource Include="wrench.ico" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\SPAGS\SVN\SPAGS\SPAGS.csproj">
+      <Project>{5482E0F4-7106-458A-A1C0-2E74C704837D}</Project>
+      <Name>SPAGS</Name>
+    </ProjectReference>
+  </ItemGroup>
+  <Import Project="$(MSBuildBinPath)\Microsoft.CSharp.targets" />
+  <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
+       Other similar extension points exist, see Microsoft.Common.targets.
+  <Target Name="BeforeBuild">
+  </Target>
+  <Target Name="AfterBuild">
+  </Target>
+  -->
+  <PropertyGroup>
+    <PostBuildEvent>C:\Tools\ILMerge\ilmerge.exe /out:D:/Projects/AGSLua/AGS3.2.1F3/AGS.Plugin.Lua.dll d:/projects/agslua/EditorPlugin/bin/Release/AGS.Plugin.Lua.dll c:/sdks/zlib.net/zlib.net_104/bin/zlib.net.dll C:/SDKs/Scintilla.NET/Source/Branches/2.0/ScintillaNET/bin/Release/ScintillaNet.dll D:\Projects\SPAGS\SVN\SPAGS\bin\Release\SPAGS.dll</PostBuildEvent>
+  </PropertyGroup>
+</Project>
