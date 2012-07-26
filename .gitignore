@@ -1,7 +1,5 @@
 *.suo
 *.user
-*.dll
-*.lib
 *.exp
 *.dll.config
 *.pdb
