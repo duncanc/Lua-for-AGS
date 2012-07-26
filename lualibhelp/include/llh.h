@@ -73,14 +73,16 @@ extern "C" {
 
 #define llh_checkboxedptr(L, obj_idx, meta_idx, type_name)								\
 	(																					\
-		luaL_argcheck(																	\
-			(L),																		\
-			lua_getmetatable((L),(obj_idx)) && lua_rawequal((L),-1,(meta_idx)),			\
-			(obj_idx),																	\
-			"expecting " type_name														\
-		),																				\
-		lua_pop((L),1),																	\
-		llh_unboxptr((L),(obj_idx))														\
+		lua_isnil((L), (obj_idx)) ? NULL : (                                                \
+			luaL_argcheck(																	\
+				(L),																		\
+				lua_getmetatable((L),(obj_idx)) && lua_rawequal((L),-1,(meta_idx)),			\
+				(obj_idx),																	\
+				"expecting " type_name														\
+			),																				\
+			lua_pop((L),1),																	\
+			llh_unboxptr((L),(obj_idx))														\
+		)                                                                              \
 	)
 
 #define llh_checkstruct(L, obj_idx, meta_idx, type_name)								\

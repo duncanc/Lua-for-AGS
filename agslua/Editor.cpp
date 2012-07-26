@@ -207,40 +207,66 @@ void AGS_EditorShutdown() {
 	editor->UnregisterScriptHeader(ourScriptHeader);
 	if (main_L) {
 		lua_close(main_L);
+		main_L = NULL;
 	}
 }
 
-int AGS_EditorSaveGame (char *buffer, int bufsize) {
+int savegame_aux(lua_State *L) {
 	int written = 0;
-	FILE* f;
-	if (f = fopen("Compiled/lscripts.dat", "rb")) {
-		if (bufsize < 16) {
-			fclose(f);
-			MessageBox(NULL, "Lua plugin requires at least 16 bytes of game data", "Not enough game data", MB_OK);
-		}
-		else {
-			int offset,length;
-			fseek(f, -16, SEEK_END);
-			fread(&offset, sizeof(offset), 1, f);
-			fseek(f, -8, SEEK_END);
-			fread(&length, sizeof(length), 1, f);
-			fseek(f, offset, SEEK_SET);
-			aux_loadcompressed(main_L, f, offset, length);
-			lua_call(main_L,0,1);
-			if (lua_istable(main_L,-1)) {
-				// get guid check
-				lua_getfield(main_L,-1,"guid");
-				if (lua_isstring(main_L,-1) && lua_objlen(main_L,-1) == 16) {
-					memcpy((void*)buffer, lua_tostring(main_L,-1), 16);
-					written = 16;
-				}
-				lua_pop(main_L,1);
-			}
-			lua_pop(main_L,1);
-		}
-		fclose(f);
+	FILE* f = fopen("Compiled/lscripts.dat", "rb");
+	if (!f) {
+		return 0;
 	}
-	return written;
+	int offset, length;
+	fseek(f, -16, SEEK_END);
+	fread(&offset, sizeof(offset), 1, f);
+	fseek(f, -8, SEEK_END);
+	fread(&length, sizeof(length), 1, f);
+	fseek(f, offset, SEEK_SET);
+	aux_loadcompressed(L, f, offset, length);
+	lua_call(L,0,1);
+	if (lua_istable(L,-1)) {
+		// get guid check
+		lua_getfield(L,-1,"guid");
+	}
+	else {
+		lua_pushnil(L);
+	}
+	lua_remove(L,-2);
+	fclose(f);
+	return 1;
+}
+
+int AGS_EditorSaveGame (char *buffer, int bufsize) {
+	if (!main_L)
+	{
+		MessageBox(NULL, "Error serializing Lua information: Lua state was not opened", "Lua Error", MB_OK);
+		return 0;
+	}
+	lua_pushcfunction(main_L, savegame_aux);
+	if (0 != lua_pcall(main_L, 0, 1, 0))
+	{
+		DebugMessage(main_L, "lua save error: %s", lua_tostring(main_L,-1));
+		lua_pop(main_L, 1);
+		return 0;
+	}
+	int t = lua_type(main_L, -1);
+	if (t != LUA_TSTRING)
+	{
+		DebugMessage(main_L, "lua save returned wrong value type (expecting string, got %s)", lua_typename(main_L, t));
+		lua_pop(main_L, 1);
+		return 0;
+	}
+	int len = lua_objlen(main_L,-1);
+	if (bufsize < len)
+	{
+		DebugMessage(main_L, "lua plugin needs %d bytes of save data (got %d)", len, bufsize);
+		lua_pop(main_L, 1);
+		return 0;
+	}
+	memcpy(buffer, lua_tostring(main_L,-1), len);
+	lua_pop(main_L, 1);
+	return len;
 }
 
 void AGS_EditorLoadGame (char *buffer, int bufsize) {

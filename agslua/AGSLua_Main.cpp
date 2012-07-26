@@ -38,25 +38,6 @@ static int ags_character__tostring(lua_State *L) {
 
 #define HOTSPOTMETA_UV_LIB lua_upvalueindex(1)
 
-static int ags_hotspot__index(lua_State *L) {
-	lua_getfenv(L,1);
-	lua_pushvalue(L,2);
-	lua_rawget(L,-2);
-	if (!lua_isnil(L,-1)) {
-		return 1;
-	}
-	lua_pushvalue(L,2);
-	lua_rawget(L, HOTSPOTMETA_UV_LIB);
-	return 1;
-}
-
-static int ags_hotspot__newindex(lua_State *L) {
-	lua_getfenv(L, 1);
-	lua_insert(L,-3);
-	lua_rawset(L,-3);
-	return 0;
-}
-
 static int ags_hotspot__tostring(lua_State *L) {
 	AGS_RoomThing* thing = (AGS_RoomThing*)lua_touserdata(L,1);
 	if (thing->RoomID != ags_current_room) {
@@ -69,8 +50,6 @@ static int ags_hotspot__tostring(lua_State *L) {
 }
 
 static const luaL_Reg ags_hotspot_meta[] = {
-	{"__index", ags_hotspot__index},
-	{"__newindex", ags_hotspot__newindex},
 	{"__tostring", ags_hotspot__tostring},
 	{NULL, NULL}
 };
@@ -79,25 +58,6 @@ static const luaL_Reg ags_hotspot_meta[] = {
 
 #define REGIONMETA_UV_LIB lua_upvalueindex(1)
 
-static int ags_region__index(lua_State *L) {
-	lua_getfenv(L,1);
-	lua_pushvalue(L,2);
-	lua_rawget(L,-2);
-	if (!lua_isnil(L,-1)) {
-		return 1;
-	}
-	lua_pushvalue(L,2);
-	lua_rawget(L, REGIONMETA_UV_LIB);
-	return 1;
-}
-
-static int ags_region__newindex(lua_State *L) {
-	lua_getfenv(L, 1);
-	lua_insert(L,-3);
-	lua_rawset(L,-3);
-	return 0;
-}
-
 static int ags_region__tostring(lua_State *L) {
 	AGS_RoomThing* thing = (AGS_RoomThing*)lua_touserdata(L,1);
 	lua_pushfstring(L, "(room %d region %d)", thing->RoomID, thing->ThingID);
@@ -105,8 +65,6 @@ static int ags_region__tostring(lua_State *L) {
 }
 
 static const luaL_Reg ags_region_meta[] = {
-	{"__index", ags_region__index},
-	{"__newindex", ags_region__newindex},
 	{"__tostring", ags_region__tostring},
 	{NULL, NULL}
 };
@@ -114,25 +72,6 @@ static const luaL_Reg ags_region_meta[] = {
 #undef REGIONMETA_UV_LIB
 
 #define OBJECTMETA_UV_LIB lua_upvalueindex(1)
-
-static int ags_object__index(lua_State *L) {
-	lua_getfenv(L,1);
-	lua_pushvalue(L,2);
-	lua_rawget(L,-2);
-	if (!lua_isnil(L,-1)) {
-		return 1;
-	}
-	lua_pushvalue(L,2);
-	lua_rawget(L, OBJECTMETA_UV_LIB);
-	return 1;
-}
-
-static int ags_object__newindex(lua_State *L) {
-	lua_getfenv(L, 1);
-	lua_insert(L,-3);
-	lua_rawset(L,-3);
-	return 0;
-}
 
 static int ags_object__tostring(lua_State *L) {
 	AGS_RoomThing* thing = (AGS_RoomThing*)lua_touserdata(L,1);
@@ -146,8 +85,6 @@ static int ags_object__tostring(lua_State *L) {
 }
 
 static const luaL_Reg ags_object_meta[] = {
-	{"__index", ags_object__index},
-	{"__newindex", ags_object__newindex},
 	{"__tostring", ags_object__tostring},
 	{NULL, NULL}
 };
@@ -156,25 +93,6 @@ static const luaL_Reg ags_object_meta[] = {
 
 #define IMMORTALMETA_UV_LIB lua_upvalueindex(1)
 
-static int ags_immortal__index(lua_State *L) {
-	lua_getfenv(L,1);
-	lua_pushvalue(L,2);
-	lua_rawget(L,-2);
-	if (!lua_isnil(L,-1)) {
-		return 1;
-	}
-	lua_pushvalue(L,2);
-	lua_rawget(L, IMMORTALMETA_UV_LIB);
-	return 1;
-}
-
-static int ags_immortal__newindex(lua_State *L) {
-	lua_getfenv(L, 1);
-	lua_replace(L, 1);
-	lua_rawset(L, 1);
-	return 0;
-}
-
 static int ags_inventoryitem__tostring(lua_State *L) {
 	AGS_InventoryItem* item = *(AGS_InventoryItem**)lua_touserdata(L,1);
 	lua_pushstring(L, AGS_InventoryItem_get_Name(item));
@@ -182,17 +100,13 @@ static int ags_inventoryitem__tostring(lua_State *L) {
 }
 
 static const luaL_Reg ags_immortal_meta[] = {
-	/*
-	{"__index", ags_immortal__index},
-	{"__newindex", ags_immortal__newindex},
-	*/
 	{NULL, NULL}
 };
 
 static void GetLibTableForImmortalMetatable(lua_State *L, int IDX_META) {
 	lua_getfield(L,IDX_META,"__index");
 	if (lua_isfunction(L,-1)) {
-		if (lua_getupvalue(L,lua_gettop(L),1) == NULL) {
+		if (lua_getupvalue(L,lua_gettop(L),3) == NULL) {
 			lua_pushnil(L);
 		}
 		lua_remove(L,-2);
@@ -203,13 +117,13 @@ static void SetLibTableForImmortalMetatable(lua_State* L, int IDX_META, int IDX_
 	lua_getfield(L,IDX_META,"__index");
 	if (lua_isfunction(L,-1)) {
 		lua_pushvalue(L,IDX_NEWLIB);
-		if (lua_setupvalue(L,lua_gettop(L)-1,1) == NULL) {
+		if (lua_setupvalue(L,lua_gettop(L)-1,3) == NULL) {
 			lua_pop(L,1);
 			MessageBox(NULL, "wrong number of upvalues", "wrong number of upvalues", MB_OK);
 		}
 		lua_getfield(L,IDX_META,"__newindex");
 		lua_pushvalue(L,IDX_NEWLIB);
-		if (lua_setupvalue(L,lua_gettop(L)-1,1) == NULL) {
+		if (lua_setupvalue(L,lua_gettop(L)-1,4) == NULL) {
 			lua_pop(L,1);
 			MessageBox(NULL, "wrong number of upvalues", "wrong number of upvalues", MB_OK);
 		}
@@ -702,8 +616,6 @@ int init_main_L(lua_State* L) {
 	lua_pushvalue(L, IDX_CHARACTER_META);
 	lua_pushvalue(L, IDX_IMMORTAL_STORE);
 	lua_pushcclosure(L, ags_get_player, 2);
-	lua_pushvalue(L, -1);
-	lua_setfield(L, IDX_AGS_LIB, "getplayer");
 	lua_setfield(L, IDX_AGS_LIB, "get_player");
 
 	{
@@ -1165,6 +1077,7 @@ void AGS_EngineStartup(IAGSEngine *lpEngine) {
 	engine = lpEngine;
 	if (16 != engine->GetSavedData((char*)lscripts_guid, 16)) {
 		main_L = NULL;
+		engine->AbortGame("Lua check GUID not found");
 		return;
 	}
 	if (engine->version < 24) {

@@ -7,6 +7,7 @@ extern "C" {
 }
 
 #include "CompressedLuaChunks.h"
+#include "AGSLua.h"
 
 int AGSLuaPersistWriter(lua_State *persist_L, const void* p, size_t sz, void* ud) {
 	AGSLuaPersistState* pst = (AGSLuaPersistState*)ud;
@@ -32,8 +33,8 @@ const char* AGSLuaPersistReader(lua_State *persist_L, void* data, size_t* size) 
 			break;
 		}
 		else if (code != Z_OK && code != Z_BUF_ERROR) {
-			MessageBox(NULL, "zlib decompression error", "zlib error", MB_OK);
-			break;
+			luaL_error(persist_L, "zlib decompression error");
+			return NULL;
 		}
 	}
 	*size = (size_t)(ZLIB_INFLATE_BUFSIZE - pst->z_stream.avail_out);
@@ -50,6 +51,7 @@ int aux_loadcompressed(lua_State* L, FILE* f, int offset, int length) {
 	fseek(f, offset, SEEK_SET);
 	buf = (const char*)malloc(length);
 	fread((void*)buf, 1, length, f);
+
 	state.z_stream.avail_in = (uInt)length;
 	state.z_stream.next_in = (Bytef*)buf;
 	state.z_stream.avail_out = ZLIB_INFLATE_BUFSIZE;
@@ -57,10 +59,15 @@ int aux_loadcompressed(lua_State* L, FILE* f, int offset, int length) {
 	state.z_stream.zalloc = Z_NULL;
 	state.z_stream.zfree = Z_NULL;
 	state.z_stream.opaque = NULL;
-	inflateInit(&state.z_stream);
+	state.z_stream.msg = "HI";
+	int code = inflateInit(&state.z_stream);
+	if (code != Z_OK)
+	{
+		fclose(f);
+		luaL_error(L, "inflateInit returned error code %d", code);
+	}
 	retcode = lua_load(L, AGSLuaPersistReader, &state, "lscripts.dat");
 	inflateEnd(&state.z_stream);
 	free((void*)buf);
 	return retcode;
 }
-
