@@ -59,7 +59,6 @@ int aux_loadcompressed(lua_State* L, FILE* f, int offset, int length) {
 	state.z_stream.zalloc = Z_NULL;
 	state.z_stream.zfree = Z_NULL;
 	state.z_stream.opaque = NULL;
-	state.z_stream.msg = "HI";
 	int code = inflateInit(&state.z_stream);
 	if (code != Z_OK)
 	{
