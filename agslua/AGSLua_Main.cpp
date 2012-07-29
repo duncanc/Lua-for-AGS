@@ -6,6 +6,7 @@
 #include "agslua_autogen.h"
 #include "CompressedLuaChunks.h"
 #include "SerializeLuaUniverse.h"
+#include "AGSStructFields.h"
 
 extern "C" {
 	#include "lua.h"
@@ -471,8 +472,16 @@ int init_main_L(lua_State* L) {
 		fclose(f);
 	}
 
+	lua_pushcfunction(L, luaopen_ags_Room);
+	lua_call(L,0,1);
+	int IDX_ROOM_LIB = lua_gettop(L);
+
 	lua_pushcfunction(L, luaopen_ags_Game);
-	lua_call(L,0,0);
+	lua_call(L,0,1);
+	AddGameStateFields(L, IDX_ROOM_LIB);
+	lua_setfield(L, IDX_AGS_LIB, "game");
+	lua_settop(L, IDX_ROOM_LIB - 1);
+
 	lua_pushcfunction(L, luaopen_ags_System);
 	lua_call(L,0,0);
 	{
@@ -493,8 +502,6 @@ int init_main_L(lua_State* L) {
 	lua_pushcfunction(L, luaopen_ags_AudioChannel);
 	lua_call(L,0,1);
 	lua_pushcfunction(L, luaopen_ags_DrawingSurface);
-	lua_call(L,0,0);
-	lua_pushcfunction(L, luaopen_ags_Room);
 	lua_call(L,0,0);
 	lua_pushcfunction(L, luaopen_ags_Parser);
 	lua_call(L,0,0);
@@ -544,6 +551,7 @@ int init_main_L(lua_State* L) {
 	lua_pushcfunction(L, luaopen_ags_Character);
 	lua_call(L,0,1);
 	IDX_CHARACTER_LIB = lua_gettop(L);
+	AddCharacterStructFields(L);
 	lua_pushcfunction(L, luaopen_ags_AudioClip);
 	lua_call(L,0,1);
 	IDX_AUDIOCLIP_LIB = lua_gettop(L);
