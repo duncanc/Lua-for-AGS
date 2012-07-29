@@ -341,6 +341,46 @@ const char* ReadSingleString(lua_State *persist_L, void* data, size_t* size) {
 	return lua_tolstring(L,-2,size);
 }
 
+int ags_call_aux(lua_State *L, long global, int queue) {
+	const char* name = luaL_checkstring(L,1);
+	int numArgs = lua_gettop(L) - 1;
+	if (numArgs > (queue?2:3))
+	{
+		luaL_error(L, "too many parameters in call to %s(): maximum %d, received %d", name, queue?2:3, numArgs);
+	}
+	int arg1 = numArgs>0 ? luaL_checkint(L,2) : 0;
+	int arg2 = numArgs>1 ? luaL_checkint(L,3) : 0;
+	int arg3 = numArgs>2 ? luaL_checkint(L,4) : 0;
+	if (queue)
+	{
+		engine->QueueGameScriptFunction(name, global, numArgs, arg1,arg2);
+	}
+	else
+	{
+		if (0 != engine->CallGameScriptFunction(name, global, numArgs, arg1,arg2,arg3))
+		{
+			return luaL_error(L, "failed to call script function %s()", name);
+		}
+	}
+	return 0;
+}
+
+int ags_call(lua_State *L) {
+	return ags_call_aux(L, 1, 0);
+}
+
+int ags_queue(lua_State *L) {
+	return ags_call_aux(L, 1, 1);
+}
+
+int ags_Room_call(lua_State *L) {
+	return ags_call_aux(L, 0, 0);
+}
+
+int ags_Room_queue(lua_State *L) {
+	return ags_call_aux(L, 0, 1);
+}
+
 int init_main_L(lua_State* L) {
 	int IDX_AGS_LIB,
 		IDX_CHARACTER_META, IDX_CHARACTER_LIB,
@@ -387,6 +427,13 @@ int init_main_L(lua_State* L) {
 
 	luaopen_ags(L);
 	IDX_AGS_LIB = lua_gettop(L);
+
+	/*
+	lua_pushcfunction(L, ags_call);
+	lua_setfield(L, IDX_AGS_LIB, "call");
+	*/
+	lua_pushcfunction(L, ags_queue);
+	lua_setfield(L, IDX_AGS_LIB, "queue");
 
 	//engine->GetPathToFileInCompiledFolder("lscripts.dat", buffer);
 	if (f = fopen(engine->IsRunningUnderDebugger() ? "Compiled/lscripts.dat" : "lscripts.dat", "rb")) {
@@ -475,6 +522,13 @@ int init_main_L(lua_State* L) {
 	lua_pushcfunction(L, luaopen_ags_Room);
 	lua_call(L,0,1);
 	int IDX_ROOM_LIB = lua_gettop(L);
+
+	/*
+	lua_pushcfunction(L, ags_Room_call);
+	lua_setfield(L, IDX_ROOM_LIB, "call");
+	*/
+	lua_pushcfunction(L, ags_Room_queue);
+	lua_setfield(L, IDX_ROOM_LIB, "queue");
 
 	lua_pushcfunction(L, luaopen_ags_Game);
 	lua_call(L,0,1);
