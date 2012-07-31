@@ -282,6 +282,7 @@ int diff(lua_State *L) {
 		// ... name, current, pristine
 		lua_pop(L,2);
 		// ... name
+		if (engine) engine->PollSystem();
 	}
 	return 0;
 }

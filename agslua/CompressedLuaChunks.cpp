@@ -21,6 +21,7 @@ int AGSLuaPersistWriter(lua_State *persist_L, const void* p, size_t sz, void* ud
 			pst->z_stream.avail_out = LUAL_BUFFERSIZE;
 		}
 	}
+	if (engine) engine->PollSystem();
 	return 0;
 }
 
