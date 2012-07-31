@@ -1,5 +1,7 @@
 
+#if defined(WINDOWS_VERSION)
 #include <windows.h>
+#endif
 
 extern "C" {
 	#include <zlib.h>

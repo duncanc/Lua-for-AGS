@@ -1,5 +1,10 @@
 
+#if defined(WINDOWS_VERSION)
 #include <windows.h>
+#else
+#include <string.h>
+#include <ctype.h>
+#endif
 
 extern "C" {
 #include "lua.h"
@@ -239,18 +244,18 @@ static void UnregisterFunction(const char* name) {
 }
 
 void RegisterLuaModuleStruct() {
-	engine->RegisterScriptFunction("Lua::RunScript^1", LuaRun);
+	engine->RegisterScriptFunction("Lua::RunScript^1", (void*)LuaRun);
 
-	engine->RegisterScriptFunction("Lua::RequireModule^1", LuaRequireModule);
+	engine->RegisterScriptFunction("Lua::RequireModule^1", (void*)LuaRequireModule);
 
-	engine->RegisterScriptFunction("Lua::RegisterGlobalScriptFunction^2", RegisterGlobalFunction);
-	engine->RegisterScriptFunction("Lua::RegisterRoomScriptFunction^2", RegisterRoomFunction);
-	engine->RegisterScriptFunction("Lua::UnregisterFunction^1", UnregisterFunction);
+	engine->RegisterScriptFunction("Lua::RegisterGlobalScriptFunction^2", (void*)RegisterGlobalFunction);
+	engine->RegisterScriptFunction("Lua::RegisterRoomScriptFunction^2", (void*)RegisterRoomFunction);
+	engine->RegisterScriptFunction("Lua::UnregisterFunction^1", (void*)UnregisterFunction);
 
-	engine->RegisterScriptFunction("Lua::SetVar^2", LuaSetVar);
-	engine->RegisterScriptFunction("Lua::GetVar^1", LuaGetVar);
-	engine->RegisterScriptFunction("Lua::Evaluate^1", LuaEvaluate);
-	engine->RegisterScriptFunction("Lua::Call^3", LuaCall);
+	engine->RegisterScriptFunction("Lua::SetVar^2", (void*)LuaSetVar);
+	engine->RegisterScriptFunction("Lua::GetVar^1", (void*)LuaGetVar);
+	engine->RegisterScriptFunction("Lua::Evaluate^1", (void*)LuaEvaluate);
+	engine->RegisterScriptFunction("Lua::Call^3", (void*)LuaCall);
 
-	engine->RegisterScriptFunction("Lua::CreateTable^1", LuaSetVarToNewTable);
+	engine->RegisterScriptFunction("Lua::CreateTable^1", (void*)LuaSetVarToNewTable);
 }
