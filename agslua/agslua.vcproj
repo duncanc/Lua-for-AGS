@@ -40,7 +40,7 @@
 				Name="VCCLCompilerTool"
 				Optimization="0"
 				AdditionalIncludeDirectories="D:\Projects\lualibhelp\include;C:\SDKs\zlib\include;&quot;C:\SDKs\lua-5.1.4-bin\include&quot;"
-				PreprocessorDefinitions="_CRT_SECURE_NO_WARNINGS;WIN32_LEAN_AND_MEAN;THIS_IS_THE_PLUGIN"
+				PreprocessorDefinitions="_CRT_SECURE_NO_WARNINGS;WIN32_LEAN_AND_MEAN;THIS_IS_THE_PLUGIN;WINDOWS_VERSION"
 				MinimalRebuild="true"
 				BasicRuntimeChecks="3"
 				RuntimeLibrary="3"
@@ -116,7 +116,7 @@
 			<Tool
 				Name="VCCLCompilerTool"
 				AdditionalIncludeDirectories="D:\Projects\lualibhelp\include;C:\SDKs\zlib\include;&quot;C:\SDKs\lua-5.1.4-bin\include&quot;"
-				PreprocessorDefinitions="_CRT_SECURE_NO_WARNINGS;WIN32_LEAN_AND_MEAN;THIS_IS_THE_PLUGIN;WINVER=0x0500"
+				PreprocessorDefinitions="_CRT_SECURE_NO_WARNINGS;WIN32_LEAN_AND_MEAN;THIS_IS_THE_PLUGIN;WINDOWS_VERSION;WINVER=0x0500"
 				RuntimeLibrary="0"
 				WarningLevel="3"
 				Detect64BitPortabilityProblems="true"

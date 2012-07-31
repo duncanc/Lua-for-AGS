@@ -1,5 +1,8 @@
 
+#if defined(WINDOWS_VERSION)
 #include <windows.h>
+#endif
+
 extern "C" {
 #include <lua.h>
 #include <lauxlib.h>

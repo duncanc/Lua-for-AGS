@@ -409,7 +409,9 @@ static int agsinternal_setpristine(lua_State *L) {
 }
 
 static int agsinternal_MessageBox(lua_State *L) {
+#if defined(WINDOWS_VERSION)
 	MessageBox(NULL, lua_tostring(L,1), "message", MB_OK);
+#endif
 	return 0;
 }
 

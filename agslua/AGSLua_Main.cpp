@@ -1,5 +1,10 @@
 
+#if defined(WINDOWS_VERSION)
 #include <windows.h>
+#else
+#include <string.h>
+#define DLLEXPORT
+#endif
 
 #include "agsplugin.h"
 #include "agslua.h"
@@ -27,7 +32,7 @@ long long* ags_object_array;
 long long* ags_region_array;
 long long* ags_character_array;
 
-HANDLE luaMutex;
+// HANDLE luaMutex;
 
 int ags_closing = 0;
 
@@ -120,13 +125,17 @@ static void SetLibTableForImmortalMetatable(lua_State* L, int IDX_META, int IDX_
 		lua_pushvalue(L,IDX_NEWLIB);
 		if (lua_setupvalue(L,lua_gettop(L)-1,3) == NULL) {
 			lua_pop(L,1);
+#if defined(WINDOWS_VERSION)
 			MessageBox(NULL, "wrong number of upvalues", "wrong number of upvalues", MB_OK);
+#endif
 		}
 		lua_getfield(L,IDX_META,"__newindex");
 		lua_pushvalue(L,IDX_NEWLIB);
 		if (lua_setupvalue(L,lua_gettop(L)-1,4) == NULL) {
 			lua_pop(L,1);
+#if defined(WINDOWS_VERION)
 			MessageBox(NULL, "wrong number of upvalues", "wrong number of upvalues", MB_OK);
+#endif
 		}
 		lua_pop(L,2);
 	}
@@ -409,7 +418,7 @@ int init_main_L(lua_State* L) {
 		engine->AbortGame("[Lua] string.format cannot be found!");
 	}
 
-	luaMutex = CreateMutex(NULL, FALSE, NULL);
+	// luaMutex = CreateMutex(NULL, FALSE, NULL);
 
 	// Customisations (panic handler, print replacement, runscript, loadscript, lscripts package loader)
 	lua_pushcfunction(L, luaopen_ags_customlua);

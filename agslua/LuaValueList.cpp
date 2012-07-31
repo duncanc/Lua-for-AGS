@@ -1,5 +1,7 @@
 
+#if defined(WINDOWS_VERSION)
 #include <windows.h>
+#endif
 
 extern "C" {
 	#include <lua.h>
@@ -734,44 +736,44 @@ static void* LuaValueList_Splice(void* list, int index, int removals, void* newE
 void RegisterLuaValueListFunctions() {
 	engine->AddManagedObjectReader(LUAVALUELIST_TYPENAME, &gLuaValueListReader);
 
-	engine->RegisterScriptFunction("Lua::NewValueList^0", LuaValueList_Create);
+	engine->RegisterScriptFunction("Lua::NewValueList^0", (void*)LuaValueList_Create);
 
-	engine->RegisterScriptFunction("Lua::StringValue^1", Lua_StringValue);
-	engine->RegisterScriptFunction("Lua::IntValue^1", Lua_IntValue);
-	engine->RegisterScriptFunction("Lua::FloatValue^1", Lua_FloatValue);
-	engine->RegisterScriptFunction("Lua::BoolValue^1", Lua_BoolValue);
-	engine->RegisterScriptFunction("Lua::get_NilValue", Lua_NilValue);
+	engine->RegisterScriptFunction("Lua::StringValue^1", (void*)Lua_StringValue);
+	engine->RegisterScriptFunction("Lua::IntValue^1", (void*)Lua_IntValue);
+	engine->RegisterScriptFunction("Lua::FloatValue^1", (void*)Lua_FloatValue);
+	engine->RegisterScriptFunction("Lua::BoolValue^1", (void*)Lua_BoolValue);
+	engine->RegisterScriptFunction("Lua::get_NilValue", (void*)Lua_NilValue);
 
-	engine->RegisterScriptFunction("LuaValueList::Add^1", LuaValueList_Add);
-	engine->RegisterScriptFunction("LuaValueList::geti_Values", LuaValueList_geti_Values);
-	engine->RegisterScriptFunction("LuaValueList::seti_Values", LuaValueList_seti_Values);
+	engine->RegisterScriptFunction("LuaValueList::Add^1", (void*)LuaValueList_Add);
+	engine->RegisterScriptFunction("LuaValueList::geti_Values", (void*)LuaValueList_geti_Values);
+	engine->RegisterScriptFunction("LuaValueList::seti_Values", (void*)LuaValueList_seti_Values);
 
-	engine->RegisterScriptFunction("String::AsLuaValue", Lua_StringValue);
-	engine->RegisterScriptFunction("String::LuaMethod", StringLuaMethod);
+	engine->RegisterScriptFunction("String::AsLuaValue", (void*)Lua_StringValue);
+	engine->RegisterScriptFunction("String::LuaMethod", (void*)StringLuaMethod);
 
-	engine->RegisterScriptFunction("LuaValue::get_AsInt", LuaValueList_ToInt);
-	engine->RegisterScriptFunction("LuaValue::get_AsFloat", LuaValueList_ToFloat);
-	engine->RegisterScriptFunction("LuaValue::get_AsString", LuaValueList_ToString);
-	engine->RegisterScriptFunction("LuaValue::get_AsBool", LuaValueList_ToBool);
-	engine->RegisterScriptFunction("LuaValue::get_Type", LuaValue_get_Type);
+	engine->RegisterScriptFunction("LuaValue::get_AsInt", (void*)LuaValueList_ToInt);
+	engine->RegisterScriptFunction("LuaValue::get_AsFloat", (void*)LuaValueList_ToFloat);
+	engine->RegisterScriptFunction("LuaValue::get_AsString", (void*)LuaValueList_ToString);
+	engine->RegisterScriptFunction("LuaValue::get_AsBool", (void*)LuaValueList_ToBool);
+	engine->RegisterScriptFunction("LuaValue::get_Type", (void*)LuaValue_get_Type);
 
-	engine->RegisterScriptFunction("LuaValueList::get_Length", LuaValueList_get_Length);
-	engine->RegisterScriptFunction("LuaValueList::set_Length", LuaValueList_set_Length);
-	engine->RegisterScriptFunction("LuaValueList::get_Error", LuaValueList_get_Error);
-	engine->RegisterScriptFunction("LuaValueList::get_CallResult", LuaValueList_get_CallResult);
-	engine->RegisterScriptFunction("LuaValueList::get_IsReadOnly", LuaValueList_get_IsReadOnly);
-	engine->RegisterScriptFunction("LuaValueList::geti_AsStrings", LuaValueList_geti_AsStrings);
-	engine->RegisterScriptFunction("LuaValueList::seti_AsStrings", LuaValueList_seti_AsStrings);
-	engine->RegisterScriptFunction("LuaValueList::geti_AsInts", LuaValueList_geti_AsInts);
-	engine->RegisterScriptFunction("LuaValueList::seti_AsInts", LuaValueList_seti_AsInts);
-	engine->RegisterScriptFunction("LuaValueList::geti_AsFloats", LuaValueList_geti_AsFloats);
-	engine->RegisterScriptFunction("LuaValueList::seti_AsFloats", LuaValueList_seti_AsFloats);
-	engine->RegisterScriptFunction("LuaValueList::geti_AsBools", LuaValueList_geti_AsBools);
-	engine->RegisterScriptFunction("LuaValueList::seti_AsBools", LuaValueList_seti_AsBools);
-	engine->RegisterScriptFunction("LuaValueList::geti_Types", LuaValueList_geti_Types);
+	engine->RegisterScriptFunction("LuaValueList::get_Length", (void*)LuaValueList_get_Length);
+	engine->RegisterScriptFunction("LuaValueList::set_Length", (void*)LuaValueList_set_Length);
+	engine->RegisterScriptFunction("LuaValueList::get_Error", (void*)LuaValueList_get_Error);
+	engine->RegisterScriptFunction("LuaValueList::get_CallResult", (void*)LuaValueList_get_CallResult);
+	engine->RegisterScriptFunction("LuaValueList::get_IsReadOnly", (void*)LuaValueList_get_IsReadOnly);
+	engine->RegisterScriptFunction("LuaValueList::geti_AsStrings", (void*)LuaValueList_geti_AsStrings);
+	engine->RegisterScriptFunction("LuaValueList::seti_AsStrings", (void*)LuaValueList_seti_AsStrings);
+	engine->RegisterScriptFunction("LuaValueList::geti_AsInts", (void*)LuaValueList_geti_AsInts);
+	engine->RegisterScriptFunction("LuaValueList::seti_AsInts", (void*)LuaValueList_seti_AsInts);
+	engine->RegisterScriptFunction("LuaValueList::geti_AsFloats", (void*)LuaValueList_geti_AsFloats);
+	engine->RegisterScriptFunction("LuaValueList::seti_AsFloats", (void*)LuaValueList_seti_AsFloats);
+	engine->RegisterScriptFunction("LuaValueList::geti_AsBools", (void*)LuaValueList_geti_AsBools);
+	engine->RegisterScriptFunction("LuaValueList::seti_AsBools", (void*)LuaValueList_seti_AsBools);
+	engine->RegisterScriptFunction("LuaValueList::geti_Types", (void*)LuaValueList_geti_Types);
 
-	engine->RegisterScriptFunction("LuaValueList::Slice^2", LuaValueList_Slice);
-	engine->RegisterScriptFunction("LuaValueList::Splice^3", LuaValueList_Splice);
+	engine->RegisterScriptFunction("LuaValueList::Slice^2", (void*)LuaValueList_Slice);
+	engine->RegisterScriptFunction("LuaValueList::Splice^3", (void*)LuaValueList_Splice);
 }
 
 void PushLuaValueListsForSerialization(lua_State* to_L, int IDX_SAVEGAMEDATA) {

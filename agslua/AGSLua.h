@@ -2,7 +2,9 @@
 #ifndef AGSLUA_DOT_H
 #define AGSLUA_DOT_H
 
+#if defined(WINDOWS_VERSION)
 #include <windows.h>
+#endif
 
 extern "C" {
 	#include <lua.h>
@@ -10,7 +12,7 @@ extern "C" {
 #include "agsplugin.h"
 #include "agslua_autogen.h"
 
-extern HANDLE luaMutex;
+// extern HANDLE luaMutex;
 
 int ags_panic(lua_State* L);
 
@@ -29,7 +31,7 @@ public:
 	virtual int Serialize(const char *address, char *buffer, int bufsize) {
 		return 0;
 	}
-	virtual int LuaValueListInterface::Dispose(const char *address, bool force);
+	virtual int Dispose(const char *address, bool force);
 };
 
 static LuaValueListInterface gLuaValueListInterface;
