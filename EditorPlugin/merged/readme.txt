@@ -1,0 +1,1 @@
+This folder is where the final, ILmerged editor plugin DLL should be found when the project is successfully built.

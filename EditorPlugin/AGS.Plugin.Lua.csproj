@@ -182,7 +182,7 @@
     <EmbeddedResource Include="wrench.ico" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\..\SPAGS\SVN\SPAGS\SPAGS.csproj">
+    <ProjectReference Include="..\SPAGS\SPAGS.csproj">
       <Project>{5482E0F4-7106-458A-A1C0-2E74C704837D}</Project>
       <Name>SPAGS</Name>
     </ProjectReference>
@@ -196,6 +196,6 @@
   </Target>
   -->
   <PropertyGroup>
-    <PostBuildEvent>C:\Tools\ILMerge\ilmerge.exe /out:D:/Projects/AGSLua/AGS3.2.1F3/AGS.Plugin.Lua.dll d:/projects/agslua/EditorPlugin/bin/Release/AGS.Plugin.Lua.dll c:/sdks/zlib.net/zlib.net_104/bin/zlib.net.dll C:/SDKs/Scintilla.NET/Source/Branches/2.0/ScintillaNET/bin/Release/ScintillaNet.dll D:\Projects\SPAGS\SVN\SPAGS\bin\Release\SPAGS.dll</PostBuildEvent>
+    <PostBuildEvent>C:\Tools\ILMerge\ilmerge.exe /out:$(ProjectDir)merged\AGS.Plugin.Lua.dll $(TargetDir)AGS.Plugin.Lua.dll $(TargetDir)zlib.net.dll $(TargetDir)ScintillaNet.dll $(TargetDir)SPAGS.dll</PostBuildEvent>
   </PropertyGroup>
 </Project>
