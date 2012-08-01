@@ -71,6 +71,7 @@ void Init_LuaValueList(lua_State *main_L, int IDX_OBJSTORE);
 void aux_LuaValueList_push(lua_State* dest_L, void* ptr);
 int aux_LuaValueList_PushValues(void* ptr, lua_State* dest_L);
 
+extern int scriptCount;
 extern unsigned char lscripts_guid[16];
 
 void RegisterLuaModuleStruct();

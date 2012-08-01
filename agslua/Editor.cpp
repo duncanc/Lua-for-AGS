@@ -168,6 +168,10 @@ const char ourScriptHeader[] =
 	"	/// Run a short piece of Lua code and get the results." "\r\n"
 	"	import static LuaValueList* Evaluate(String expression, LuaCallMode = eLuaUnprotectedMode);" "\r\n"
 
+	"    /// The total number of Lua scripts in the script store." "\r\n"
+	"    readonly import static attribute int ScriptCount;" "\r\n"
+	"    /// The name of a script from the script store." "\r\n"
+	"    readonly import static attribute String ScriptNames[];" "\r\n"
 
 	/*
 	"	/// Add a user-defined AGS function from the global script, that takes 'numArgs' int parameters." "\r\n"

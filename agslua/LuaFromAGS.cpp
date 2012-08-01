@@ -44,6 +44,21 @@ void LuaRun(const char* scriptname) {
 	}
 }
 
+
+int Lua_ScriptCount() {
+	return scriptCount;
+}
+
+const char* Lua_ScriptName(int n) {
+	lua_getfield(main_L, LUA_REGISTRYINDEX, "lscriptnames");
+	lua_rawgeti(main_L, -1, n+1);
+	const char* name;
+	if (!lua_isstring(main_L,-1)) engine->AbortGame("Lua.ScriptNames[] index out of range");
+	else name = engine->CreateScriptString(lua_tostring(main_L,-1));
+	lua_pop(main_L, 2);
+	return name;
+}
+
 void aux_LuaGetVariable(lua_State* aux_L, const char* expr) {
 	const char* c;
 	for (c = expr; *c; c++) {
@@ -258,4 +273,7 @@ void RegisterLuaModuleStruct() {
 	engine->RegisterScriptFunction("Lua::Call^3", (void*)LuaCall);
 
 	engine->RegisterScriptFunction("Lua::CreateTable^1", (void*)LuaSetVarToNewTable);
+
+	engine->RegisterScriptFunction("Lua::get_ScriptCount", (void*)Lua_ScriptCount);
+	engine->RegisterScriptFunction("Lua::geti_ScriptNames", (void*)Lua_ScriptName);
 }

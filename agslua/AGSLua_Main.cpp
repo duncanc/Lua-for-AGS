@@ -390,6 +390,8 @@ int ags_Room_queue(lua_State *L) {
 	return ags_call_aux(L, 0, 1);
 }
 
+int scriptCount;
+
 int init_main_L(lua_State* L) {
 	int IDX_AGS_LIB,
 		IDX_CHARACTER_META, IDX_CHARACTER_LIB,
@@ -409,7 +411,7 @@ int init_main_L(lua_State* L) {
 		IDX_REGION_META, IDX_REGION_STORE, IDX_REGION_LIB,
 		IDX_IMMORTAL_STORE;
 	FILE* f;
-	int IDX_LSCRIPTS;
+	int IDX_LSCRIPTS, IDX_LSCRIPTNAMES;
 
 	luaL_openlibs(L);
 
@@ -431,8 +433,14 @@ int init_main_L(lua_State* L) {
 	lua_newtable(L);
 	IDX_LSCRIPTS = lua_gettop(L);
 
+	lua_newtable(L);
+	IDX_LSCRIPTNAMES = lua_gettop(L);
+
 	lua_pushvalue(L, IDX_LSCRIPTS);
 	lua_setfield(L, LUA_REGISTRYINDEX, "lscripts");
+
+	lua_pushvalue(L, IDX_LSCRIPTNAMES);
+	lua_setfield(L, LUA_REGISTRYINDEX, "lscriptnames");
 
 	luaopen_ags(L);
 	IDX_AGS_LIB = lua_gettop(L);
@@ -527,6 +535,16 @@ int init_main_L(lua_State* L) {
 		lua_pop(L,1);
 		fclose(f);
 	}
+
+	lua_pushnil(L);
+	int i = 0;
+	while (lua_next(L, IDX_LSCRIPTS))
+	{
+		lua_pop(L,1);
+		lua_pushvalue(L,-1);
+		lua_rawseti(L, IDX_LSCRIPTNAMES, ++i);
+	}
+	scriptCount = i;
 
 	lua_pushcfunction(L, luaopen_ags_Room);
 	lua_call(L,0,1);
