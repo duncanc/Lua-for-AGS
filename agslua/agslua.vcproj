@@ -39,8 +39,8 @@
 			<Tool
 				Name="VCCLCompilerTool"
 				Optimization="0"
-				AdditionalIncludeDirectories="D:\Projects\lualibhelp\include;C:\SDKs\zlib\include;&quot;C:\SDKs\lua-5.1.4-bin\include&quot;"
-				PreprocessorDefinitions="_CRT_SECURE_NO_WARNINGS;WIN32_LEAN_AND_MEAN;THIS_IS_THE_PLUGIN;WINDOWS_VERSION"
+				AdditionalIncludeDirectories="..\lualibhelp\include;&quot;C:\SDKs\zlib\zlib-dev_1.2.5\include&quot;;&quot;C:\SDKs\Lua\lua-5.1.4-bin\include&quot;"
+				PreprocessorDefinitions="_CRT_SECURE_NO_WARNINGS;WIN32_LEAN_AND_MEAN;THIS_IS_THE_PLUGIN;WINDOWS_VERSION;ZLIB_WINAPI"
 				MinimalRebuild="true"
 				BasicRuntimeChecks="3"
 				RuntimeLibrary="3"
@@ -59,9 +59,9 @@
 			/>
 			<Tool
 				Name="VCLinkerTool"
-				AdditionalDependencies="lua5.1.lib zlib.lib"
+				AdditionalDependencies="lua5.1.lib zlibstat.lib user32.lib"
 				OutputFile="$(OutDir)\$(ProjectName).dll"
-				AdditionalLibraryDirectories="C:\SDKs\zlib\lib;&quot;c:\sdks\lua-5.1.4-bin\&quot;"
+				AdditionalLibraryDirectories="C:\SDKs\zlib\z125\static32;&quot;C:\SDKs\Lua\lua-5.1.4-bin&quot;;&quot;C:\SDKs\microsoft Platform SDK for Windows Server 2003 R2\Lib&quot;"
 				GenerateDebugInformation="true"
 				TargetMachine="1"
 			/>
@@ -115,8 +115,8 @@
 			/>
 			<Tool
 				Name="VCCLCompilerTool"
-				AdditionalIncludeDirectories="D:\Projects\lualibhelp\include;C:\SDKs\zlib\include;&quot;C:\SDKs\lua-5.1.4-bin\include&quot;"
-				PreprocessorDefinitions="_CRT_SECURE_NO_WARNINGS;WIN32_LEAN_AND_MEAN;THIS_IS_THE_PLUGIN;WINDOWS_VERSION;WINVER=0x0500"
+				AdditionalIncludeDirectories="..\lualibhelp\include;&quot;C:\SDKs\zlib\zlib-dev_1.2.5\include&quot;;&quot;C:\SDKs\Lua\lua-5.1.4-bin\include&quot;"
+				PreprocessorDefinitions="_CRT_SECURE_NO_WARNINGS;WIN32_LEAN_AND_MEAN;THIS_IS_THE_PLUGIN;WINDOWS_VERSION;WINVER=0x0500;ZLIB_WINAPI"
 				RuntimeLibrary="0"
 				WarningLevel="3"
 				Detect64BitPortabilityProblems="true"
@@ -133,9 +133,9 @@
 			/>
 			<Tool
 				Name="VCLinkerTool"
-				AdditionalDependencies="lua5.1.lib zlib.lib"
+				AdditionalDependencies="lua5.1.lib zlibstat.lib user32.lib"
 				OutputFile="$(OutDir)\$(ProjectName).dll"
-				AdditionalLibraryDirectories="C:\SDKs\zlib;&quot;c:\sdks\lua-5.1.4-bin\&quot;"
+				AdditionalLibraryDirectories="C:\SDKs\zlib\z125\static32;&quot;C:\SDKs\Lua\lua-5.1.4-bin&quot;;&quot;C:\SDKs\microsoft Platform SDK for Windows Server 2003 R2\Lib&quot;"
 				GenerateManifest="false"
 				IgnoreAllDefaultLibraries="false"
 				IgnoreDefaultLibraryNames=""
@@ -188,6 +188,10 @@
 			</File>
 			<File
 				RelativePath=".\AGSManagedObjects.cpp"
+				>
+			</File>
+			<File
+				RelativePath=".\AGSStructFields.cpp"
 				>
 			</File>
 			<File
@@ -254,6 +258,10 @@
 			</File>
 			<File
 				RelativePath=".\agsplugin.h"
+				>
+			</File>
+			<File
+				RelativePath=".\AGSStructFields.h"
 				>
 			</File>
 			<File
