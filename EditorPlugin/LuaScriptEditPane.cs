@@ -57,6 +57,20 @@ namespace AGS.Plugin.Lua
 
             scintilla.RegisterImage(1, ResourceManager.GetResourceAsString("table.xpm"));
 
+            scintilla.SetMarginWidthN(0, 32);
+            scintilla.SetMarginTypeN(0, (int)MarginType.Number);
+
+            scintillaWrapper.Folding.Flags = FoldFlag.LineAfterContracted;
+            scintilla.SetMarginWidthN(2, 16);
+            scintilla.SetMarginTypeN(2, (int)MarginType.Symbol);
+            scintilla.MarkerDefine((int)MarkerOutline.FolderOpen, (int)MarkerSymbol.BoxMinus);
+            scintilla.MarkerDefine((int)MarkerOutline.Folder, (int)MarkerSymbol.BoxPlus);
+            scintilla.MarkerDefine((int)MarkerOutline.FolderSub, (int)MarkerSymbol.VLine);
+            scintilla.MarkerDefine((int)MarkerOutline.FolderTail, (int)MarkerSymbol.LCorner);
+            scintilla.MarkerDefine((int)MarkerOutline.FolderEnd, (int)MarkerSymbol.BoxPlusConnected);
+            scintilla.MarkerDefine((int)MarkerOutline.FolderOpenMid, (int)MarkerSymbol.BoxMinusConnected);
+            scintilla.MarkerDefine((int)MarkerOutline.FolderMidTail, (int)MarkerSymbol.TCorner);
+            scintilla.SetMarginSensitiveN(2, true);
 
             /*
             scintillaWrapper.Folding.Flags = FoldFlag.LineBeforeContracted | FoldFlag.LineAfterExpanded;
