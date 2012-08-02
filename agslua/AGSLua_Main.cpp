@@ -546,6 +546,12 @@ int init_main_L(lua_State* L) {
 	}
 	scriptCount = i;
 
+	lua_getglobal(L, "table");
+	lua_getfield(L, -1, "sort");
+	lua_pushvalue(L, IDX_LSCRIPTNAMES);
+	lua_call(L,1,0);
+	lua_pop(L,1);
+
 	lua_pushcfunction(L, luaopen_ags_Room);
 	lua_call(L,0,1);
 	int IDX_ROOM_LIB = lua_gettop(L);
