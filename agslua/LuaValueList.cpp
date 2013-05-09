@@ -8,7 +8,7 @@ extern "C" {
 	#include <lauxlib.h>
 }
 #include "agsplugin.h"
-#include "agslua.h"
+#include "AGSLua.h"
 #include "agslua_autogen.h"
 
 static const char* LUAVALUELIST_INDEX_OUT_OF_BOUNDS = "LuaValueList index out of bounds (remember to start at 1 not 0!)";

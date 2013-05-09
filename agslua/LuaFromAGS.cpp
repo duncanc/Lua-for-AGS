@@ -11,7 +11,7 @@ extern "C" {
 #include "lauxlib.h"
 }
 
-#include "agslua.h"
+#include "AGSLua.h"
 #include "agslua_autogen.h"
 
 static void lua_pushlowerpath(lua_State *L, const char* c) {
