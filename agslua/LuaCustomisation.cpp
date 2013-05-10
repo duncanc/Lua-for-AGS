@@ -8,7 +8,7 @@ extern "C" {
 #include <lauxlib.h>
 #include <ctype.h>
 }
-#include "agslua.h"
+#include "AGSLua.h"
 
 int ags_panic(lua_State* L) {
 	lua_pushstring(L, "[Lua] ");

@@ -4,7 +4,7 @@ extern "C" {
 #include <llh.h>
 }
 #include <string.h>
-#include "agslua.h"
+#include "AGSLua.h"
 #include "agslua_autogen.h"
 #include "agsplugin.h"
 
