@@ -587,6 +587,11 @@ int init_main_L(lua_State* L) {
 		// make ags.mouse the same as ags.Mouse
 		lua_setfield(L, IDX_AGS_LIB, "mouse");
 	}
+	{
+		lua_pushcfunction(L, luaopen_ags_palette);
+		lua_call(L,0,1);
+		lua_setfield(L, IDX_AGS_LIB, "palette");
+	}
 	lua_pushcfunction(L, luaopen_ags_ViewFrame);
 	lua_call(L,0,0);
 	lua_pushcfunction(L, luaopen_ags_AudioChannel);

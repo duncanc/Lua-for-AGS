@@ -78,6 +78,7 @@ void RegisterLuaModuleStruct();
 void RegisterLuaValueListFunctions();
 int luaopen_ags_customlua(lua_State *L);
 int luaopen_agsinternal(lua_State *L);
+int luaopen_ags_palette(lua_State *L);
 int hide_agsinternal(lua_State *L);
 
 class LuaGodObjectInterface : public IAGSScriptManagedObject {

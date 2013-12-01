@@ -191,6 +191,10 @@
 				>
 			</File>
 			<File
+				RelativePath=".\AGSPalette.cpp"
+				>
+			</File>
+			<File
 				RelativePath=".\AGSStructFields.cpp"
 				>
 			</File>

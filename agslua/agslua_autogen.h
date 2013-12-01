@@ -25,6 +25,7 @@ extern int ags_closing;
 #define LUACALL_SUCCESS			1
 #define LUACALL_ERROR			2
 #define LUACALL_FUNCNOTFOUND	3
+#define LUACALL_UNCALLABLE      4
 
 typedef struct EphemeralContainer {
 	const char* ptr;
@@ -48,10 +49,10 @@ void aux_LuaGetVariable(lua_State* aux_L, const char* expr);
 void aux_LuaSetVariable(const char* expr, int values);
 void aux_LuaValueList_geti(void* ptr, int i);
 void aux_LuaValueList_seti(void* ptr, int i);
-int aux_LuaCall_SetUp(void* ptr, const char* expr, void* params);
+int aux_LuaCall_SetUp(lua_State* aux_L, void* ptr, const char* expr, void* params);
 void aux_LuaCall_ReturnValue(int numParams, int protectedMode);
 void* aux_LuaValueList_Create(int fromStackValues, int callResult);
-void* aux_LuaCall_ReturnList(int numParams, int protectedMode);
+void* aux_LuaCall_ReturnList(lua_State* aux_L, int numParams, int protectedMode);
 int aux_LuaCall_SetUp_Obj(const char* expr, void* params);
 void* aux_LuaValueList_MakeReadOnly();
 

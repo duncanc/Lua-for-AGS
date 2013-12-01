@@ -290,6 +290,36 @@ static const char* LUA_INTERNAL_INIT =
 	  "lib_meta.__index = lib__index;"
 	  "lib_meta.__newindex = lib__newindex;"
 	"end;"
+
+	"local get_r, get_g, get_b = agsinternal.get_r, agsinternal.get_g, agsinternal.get_b;"
+	"local set_r, set_g, set_b = agsinternal.set_r, agsinternal.set_g, agsinternal.set_b;"
+
+	"function agsinternal.palette__index(self, i) "
+	  "if type(i) ~= 'number' or i < 0 or i > 255 then "
+	    "return nil;"
+	  "end;"
+	  "local p = {};"
+	  "rawset(self, i, p);"
+	  "function p.__index(self, k) "
+	    "if k == 'r' then "
+  		  "return get_r(i);"
+	    "elseif k == 'g' then "
+		  "return get_g(i);"
+	    "elseif k == 'b' then "
+		  "return get_b(i);"
+	    "end;"
+	  "end;"
+	  "function p.__newindex(self, k, v) "
+	    "if k == 'r' then "
+  		  "return set_r(i, v);"
+	    "elseif k == 'g' then "
+		  "return set_g(i, v);"
+	    "elseif k == 'b' then "
+		  "return set_b(i, v);"
+	    "end;"
+	  "end;"
+	  "return setmetatable(p, p);"
+	"end;"
 ;
 
 static int agsinternal_getmetatable(lua_State* L) {
@@ -420,6 +450,57 @@ static int agsinternal_get_G(lua_State *L) {
 	return 1;
 }
 
+static int agsinternal_get_r(lua_State *L) {
+	int i = luaL_checkint(L, 1);
+	luaL_argcheck(L, i >= 0 && i <= 255, 1, "index out of range");
+	AGSColor* palette = engine->GetPalette();
+	lua_pushinteger(L, palette[i].r);
+	return 1;
+}
+
+static int agsinternal_get_g(lua_State *L) {
+	int i = luaL_checkint(L, 1);
+	luaL_argcheck(L, i >= 0 && i <= 255, 1, "index out of range");
+	AGSColor* palette = engine->GetPalette();
+	lua_pushinteger(L, palette[i].g);
+	return 1;
+}
+
+static int agsinternal_get_b(lua_State *L) {
+	int i = luaL_checkint(L, 1);
+	luaL_argcheck(L, i >= 0 && i <= 255, 1, "index out of range");
+	AGSColor* palette = engine->GetPalette();
+	lua_pushinteger(L, palette[i].b);
+	return 1;
+}
+
+static int agsinternal_set_r(lua_State *L) {
+	int i = luaL_checkint(L, 1);
+	unsigned char v = (unsigned char)luaL_checkint(L, 2);
+	luaL_argcheck(L, i >= 0 && i <= 255, 1, "index out of range");
+	AGSColor* palette = engine->GetPalette();
+	palette[i].r = v;
+	return 0;
+}
+
+static int agsinternal_set_g(lua_State *L) {
+	int i = luaL_checkint(L, 1);
+	unsigned char v = (unsigned char)luaL_checkint(L, 2);
+	luaL_argcheck(L, i >= 0 && i <= 255, 1, "index out of range");
+	AGSColor* palette = engine->GetPalette();
+	palette[i].g = v;
+	return 0;
+}
+
+static int agsinternal_set_b(lua_State *L) {
+	int i = luaL_checkint(L, 1);
+	unsigned char v = (unsigned char)luaL_checkint(L, 2);
+	luaL_argcheck(L, i >= 0 && i <= 255, 1, "index out of range");
+	AGSColor* palette = engine->GetPalette();
+	palette[i].b = v;
+	return 0;
+}
+
 static const luaL_Reg agsinternal_lib[] = {
 	{"ephemeralplaceholder", agsinternal_ephemeralplaceholder},
 	{"getmetatable", agsinternal_getmetatable},
@@ -435,6 +516,12 @@ static const luaL_Reg agsinternal_lib[] = {
 	{"setpristine", agsinternal_setpristine},
 	{"get_G", agsinternal_get_G},
 	{"MessageBox", agsinternal_MessageBox},
+	{"get_r", agsinternal_get_r},
+	{"get_g", agsinternal_get_g},
+	{"get_b", agsinternal_get_b},
+	{"set_r", agsinternal_set_r},
+	{"set_g", agsinternal_set_g},
+	{"set_b", agsinternal_set_b},
 	{NULL, NULL}
 };
 
