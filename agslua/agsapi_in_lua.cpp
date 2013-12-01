@@ -3,7 +3,7 @@ extern "C" {
 	#include <lauxlib.h>
 }
 #include "agsplugin.h"
-#include "agslua.h"
+#include "AGSLua.h"
 
 AGS_ARETHINGSOVERLAPPING AGS_AreThingsOverlapping;
 AGS_CALLROOMSCRIPT AGS_CallRoomScript;

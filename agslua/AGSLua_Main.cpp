@@ -7,7 +7,7 @@
 #endif
 
 #include "agsplugin.h"
-#include "agslua.h"
+#include "AGSLua.h"
 #include "agslua_autogen.h"
 #include "CompressedLuaChunks.h"
 #include "SerializeLuaUniverse.h"

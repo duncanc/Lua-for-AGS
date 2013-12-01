@@ -1,6 +1,6 @@
 
 #include "agsplugin.h"
-#include "agslua.h"
+#include "AGSLua.h"
 
 /*
 	"#define LUA_REGISTRYINDEX (-10000)" "\r\n"

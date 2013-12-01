@@ -3,7 +3,7 @@ extern "C" {
 	#include <lua.h>
 	#include <lauxlib.h>
 }
-#include "agslua.h"
+#include "AGSLua.h"
 
 int luags_internal_GetKeyForManagedObject(lua_State *L) {
 	lua_pushinteger(L, engine->GetManagedObjectKeyByAddress((const char*)*(void**)lua_touserdata(L,1)));

@@ -20,7 +20,7 @@ AGSGameState* gamestate;
 #define DEF_GAMESTATE_FIELD(fname) \
 	DEF_GAMESTATE_GETTER(fname) \
 	static int ags_game_set_##fname(lua_State* L) { \
-		gamestate->##fname = (int)luaL_checkinteger(L, 1); \
+		gamestate->fname = (int)luaL_checkinteger(L, 1); \
 		return 0; \
 	}
 
@@ -33,7 +33,7 @@ AGSGameState* gamestate;
 #define DEF_GAMESTATE_BOOL_FIELD(fname) \
 	DEF_GAMESTATE_BOOL_GETTER(fname) \
 	static int ags_game_set_##fname(lua_State* L) { \
-		gamestate->##fname = (int)llh_checkboolean(L, 1); \
+		gamestate->fname = (int)llh_checkboolean(L, 1); \
 		return 0; \
 	}
 
