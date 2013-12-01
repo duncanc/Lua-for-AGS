@@ -535,6 +535,9 @@ int init_main_L(lua_State* L) {
 		lua_pop(L,1);
 		fclose(f);
 	}
+	else {
+		engine->AbortGame("[Lua] lscripts.dat missing! (or otherwise could not be opened)");
+	}
 
 	lua_pushnil(L);
 	int i = 0;
