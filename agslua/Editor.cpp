@@ -23,7 +23,8 @@ const char ourScriptHeader[] =
 	"	eLuaCallNone = 0," "\r\n"
 	"	eLuaCallOK = 1," "\r\n"
 	"	eLuaCallError = 2," "\r\n"
-	"	eLuaCallFuncNotFound = 3" "\r\n"
+	"	eLuaCallFuncNotFound = 3," "\r\n"
+	"	eLuaCallUncallableValue = 4" "\r\n"
 	"};" "\r\n"
 
 	"enum LuaValueType {" "\r\n"
@@ -121,10 +122,24 @@ const char ourScriptHeader[] =
 	"	readonly import attribute String AsString;" "\r\n"
 	"	/// Get the value as an int (or 0 if it is not convertible)." "\r\n"
 	"	readonly import attribute int AsInt;" "\r\n"
-	"	/// Get the values in the list as a float (or 0 if it is not convertible)." "\r\n"
+	"	/// Get the values in the list as a float (or 0.0 if it is not convertible)." "\r\n"
 	"	readonly import attribute float AsFloat;" "\r\n"
-	"	/// Get the value as a boolean (or true if it is not a boolean or nil)." "\r\n"
+	"	/// False if the value is 'false' or 'nil', true otherwise." "\r\n"
 	"	readonly import attribute bool AsBool;" "\r\n"
+
+	"	/// Get the result of the Lua length operator #." "\r\n"
+	"	readonly import attribute int ValueLength;" "\r\n"
+	"	/// Extract an element from an array." "\r\n"
+	"	import attribute LuaValue* AsArray[];" "\r\n"
+	"	/// Get a Lua field." "\r\n"
+	"   import LuaValue* GetLuaField(String field);" "\r\n"
+	"	/// Set a Lua field." "\r\n"
+	"	import void SetLuaField(String field, LuaValue* value);" "\r\n"
+
+	"	import LuaValueList* Call(LuaValueList* params = 0, LuaCallMode = eLuaUnprotectedMode);" "\r\n"
+	"	import LuaValueList* CallField(String fieldName, LuaValueList* params = 0, LuaCallMode = eLuaUnprotectedMode);" "\r\n"
+	"	import LuaValueList* CallMethod(String methodName, LuaValueList* params = 0, LuaCallMode = eLuaUnprotectedMode);" "\r\n"
+
 	"};" "\r\n"
 
 	"struct Lua {" "\r\n"

@@ -72,7 +72,7 @@ void aux_LuaGetVariable(lua_State* aux_L, const char* expr) {
 			return;
 		}
 	}
-	lua_getglobal(main_L, expr);
+	lua_getglobal(aux_L, expr);
 }
 
 void aux_LuaSetVariable(const char* expr, int values) {
@@ -122,41 +122,46 @@ int aux_LuaCall_SetUp_Obj(const char* expr, void* params) {
 	}
 }
 
-int aux_LuaCall_SetUp(void* ptr, const char* expr, void* params) {
+int aux_LuaCall_SetUp(lua_State* aux_L, void* ptr, const char* expr, void* params) {
 	if (ptr) {
-		lua_pushlightuserdata(main_L, ptr);
-		lua_rawget(main_L, LUA_REGISTRYINDEX);
+		lua_pushlightuserdata(aux_L, ptr);
+		lua_rawget(aux_L, LUA_REGISTRYINDEX);
 		return aux_LuaCall_SetUp_Obj(expr, params);
 	}
-	aux_LuaGetVariable(main_L, expr);
-	if (!lua_isfunction(main_L,-1)) {
-		if (luaL_getmetafield(main_L,-1,"__call")) {
-			lua_pop(main_L,1);
+	if (expr) {
+		aux_LuaGetVariable(aux_L, expr);
+	}
+	if (!lua_isfunction(aux_L,-1)) {
+		if (luaL_getmetafield(aux_L,-1,"__call")) {
+			lua_pop(aux_L,1);
 		}
 		else {
 			return -1;
 		}
 	}
 	if (params) {
-		return aux_LuaValueList_PushValues(params, main_L);
+		return aux_LuaValueList_PushValues(params, aux_L);
 	}
 	else {
 		return 0;
 	}
 }
 
-void* aux_LuaCall_ReturnList(int numParams, int protectedMode) {
-	int IDX_PRECALL = lua_gettop(main_L) - 1 - numParams;
+void* aux_LuaCall_ReturnList(lua_State* aux_L, int numParams, int protectedMode) {
+	int IDX_PRECALL = lua_gettop(aux_L) - 1 - numParams;
 	if (protectedMode) {
-		if (0 != lua_pcall(main_L,numParams,LUA_MULTRET,0)) {
+		if (0 != lua_pcall(aux_L, numParams, LUA_MULTRET, 0)) {
 			return aux_LuaValueList_Create(0, LUACALL_ERROR);
 		}
 	}
 	else {
-		lua_call(main_L,numParams,LUA_MULTRET);
+		lua_call(aux_L, numParams, LUA_MULTRET);
 	}
 	int retvalue_count = lua_gettop(main_L) - IDX_PRECALL;
-	lua_xmove(main_L, vlist_L, retvalue_count);
+	if (aux_L != vlist_L)
+	{
+		lua_xmove(aux_L, vlist_L, retvalue_count);
+	}
 	return aux_LuaValueList_Create(retvalue_count, LUACALL_SUCCESS);
 }
 
@@ -173,14 +178,11 @@ void aux_LuaCall_ReturnValue(int numParams, int protectedMode) {
 }
 
 static void* LuaCall(const char* expr, void* params, int protectedMode) {
-	if (strcmp(expr,"on_key_press") == 0) {
-		int x = 1;
-	}
-	int numParams = aux_LuaCall_SetUp(NULL, expr, params);
+	int numParams = aux_LuaCall_SetUp(main_L, NULL, expr, params);
 	if (numParams == -1) {
 		return aux_LuaValueList_Create(0, LUACALL_FUNCNOTFOUND);
 	}
-	void* list = aux_LuaCall_ReturnList(numParams, protectedMode);
+	void* list = aux_LuaCall_ReturnList(main_L, numParams, protectedMode);
 	return list;
 }
 

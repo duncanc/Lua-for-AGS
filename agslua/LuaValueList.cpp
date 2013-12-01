@@ -216,7 +216,15 @@ void* aux_LuaValueList_Create(int fromStackValues, int callResult) {
 	return ptr;
 }
 
+void* Lua_NilValue() {
+	return (void*)lua_topointer(vlist_L, VLIST_STACK_NIL);
+}
+
 void* aux_LuaValueList_MakeReadOnly() {
+	if (lua_isnil(vlist_L, -1)) {
+		lua_pop(vlist_L, 1);
+		return Lua_NilValue();
+	}
 	// value
 	lua_pushvalue(vlist_L,-1);
 	lua_rawget(vlist_L, VLIST_STACK_VALUECACHE);
@@ -295,10 +303,6 @@ void* Lua_FloatValue(SCRIPT_FLOAT(f)) {
 void* Lua_BoolValue(bool b) {
 	lua_pushboolean(vlist_L, b);
 	return aux_LuaValueList_MakeReadOnly();
-}
-
-void* Lua_NilValue() {
-	return (void*)lua_topointer(vlist_L, VLIST_STACK_NIL);
 }
 
 void* LuaValueList_geti_Values(void* list, int idx) {
@@ -543,6 +547,102 @@ int LuaValue_get_Type(void* ptr) {
 	}
 }
 
+int LuaValue_get_LuaLength(void* ptr) {
+	int t, result;
+	aux_LuaValueList_geti(ptr, 1);
+	switch(t = lua_type(vlist_L, -1)) {
+		case LUA_TSTRING:
+			result = (int)lua_strlen(vlist_L, -1);
+			lua_pop(vlist_L, 1);
+			break;
+		default:
+			if (luaL_getmetafield(vlist_L, -1, "__len")) {
+				lua_insert(vlist_L, -2);
+				lua_call(vlist_L, 1, 1);
+				result = (int)lua_tointeger(vlist_L, -1);
+				lua_pop(vlist_L, 1);
+			}
+			else if (t == LUA_TTABLE) {
+				result = (int)lua_objlen(vlist_L, -1);
+				lua_pop(vlist_L, 1);
+			}
+			else {
+				result = 0;
+			}
+			break;
+	}
+	return result;
+}
+
+void* LuaValue_geti_LuaIndex(void* ptr, int idx) {
+	aux_LuaValueList_geti(ptr, 1);
+	if (luaL_getmetafield(vlist_L, -1, "__index")) {
+		if (lua_istable(vlist_L, -1)) {
+			lua_remove(vlist_L, -2);
+			lua_pushinteger(vlist_L, idx);
+			lua_gettable(vlist_L, -2);
+			lua_remove(vlist_L, -2);
+		}
+		else {
+			lua_insert(vlist_L, -2);
+			lua_pushinteger(vlist_L, idx);
+			lua_call(vlist_L, 2, 1);
+		}
+	}
+	else {
+		if (lua_istable(vlist_L, -1)) {
+			lua_rawgeti(vlist_L, -1, idx);
+			lua_remove(vlist_L, -2);
+		}
+		else {
+			lua_pushnil(vlist_L);
+		}
+	}
+	return aux_LuaValueList_MakeReadOnly();
+}
+
+void LuaValue_seti_LuaIndex(void* ptr, int idx, void* ptr2) {
+	aux_LuaValueList_geti(ptr, 1);
+	lua_pushinteger(vlist_L, idx);
+	aux_LuaValueList_geti(ptr2, 1);
+	lua_settable(vlist_L, -3);
+	lua_pop(vlist_L, 1);
+}
+
+void* LuaValue_GetLuaField(void* ptr, const char* field) {
+	aux_LuaValueList_geti(ptr, 1);
+	if (luaL_getmetafield(vlist_L, -1, "__index")) {
+		if (lua_istable(vlist_L, -1)) {
+			lua_remove(vlist_L, -2);
+			lua_pushstring(vlist_L, field);
+			lua_gettable(vlist_L, -2);
+			lua_remove(vlist_L, -2);
+		}
+		else {
+			lua_insert(vlist_L, -2);
+			lua_pushstring(vlist_L, field);
+			lua_call(vlist_L, 2, 1);
+		}
+	}
+	else {
+		if (lua_istable(vlist_L, -1)) {
+			lua_getfield(vlist_L, -1, field);
+			lua_remove(vlist_L, -2);
+		}
+		else {
+			lua_pushnil(vlist_L);
+		}
+	}
+	return aux_LuaValueList_MakeReadOnly();
+}
+
+void* LuaValue_SetLuaField(void* ptr, const char* field, void* ptr2) {
+	aux_LuaValueList_geti(ptr, 1);
+	aux_LuaValueList_geti(ptr2, 1);
+	lua_setfield(vlist_L, -2, field);
+	lua_pop(vlist_L, 1);
+}
+
 void aux_LuaValueList_push(lua_State* dest_L, void* ptr) {
 	lua_pushlightuserdata(vlist_L, ptr);
 	lua_rawget(vlist_L, VLIST_STACK_LISTSTORE);
@@ -606,7 +706,7 @@ static void* StringLuaMethod(const char* str, const char* name, void* params, in
 	if (numParams == -1) {
 		return NULL; // LUACALL_FUNCNOTFOUND;
 	}
-	return aux_LuaCall_ReturnList(numParams, protectedMode);
+	return aux_LuaCall_ReturnList(main_L, numParams, protectedMode);
 }
 
 static void* LuaValueList_Slice(void* list, int beginning, int end) {
@@ -733,6 +833,41 @@ static void* LuaValueList_Splice(void* list, int index, int removals, void* newE
 	return new_list;
 }
 
+static void* LuaValue_Call(void* ptr, void* params, int protectedMode) {
+	lua_pushlightuserdata(vlist_L, ptr);
+	lua_rawget(vlist_L, VLIST_STACK_LISTSTORE);	
+	int numParams = aux_LuaCall_SetUp(vlist_L, NULL, NULL, params);
+	if (numParams == -1) {
+		return aux_LuaValueList_Create(0, LUACALL_UNCALLABLE);
+	}
+	void* list = aux_LuaCall_ReturnList(main_L, numParams, protectedMode);
+	return list;
+}
+
+static void* LuaValue_CallField(void* ptr, const char* fieldName, void* params, int protectedMode) {
+	lua_pushlightuserdata(vlist_L, ptr);
+	lua_rawget(vlist_L, VLIST_STACK_LISTSTORE);
+	lua_getfield(vlist_L, -1, fieldName);
+	lua_remove(vlist_L, -2);
+	int numParams = aux_LuaCall_SetUp(vlist_L, NULL, NULL, params);
+	if (numParams == -1) {
+		return aux_LuaValueList_Create(0, LUACALL_FUNCNOTFOUND);
+	}
+	void* list = aux_LuaCall_ReturnList(vlist_L, numParams, protectedMode);
+	return list;
+}
+
+static void* LuaValue_CallMethod(void* ptr, const char* methodName, void* params, int protectedMode) {
+	lua_pushlightuserdata(vlist_L, ptr);
+	lua_rawget(vlist_L, VLIST_STACK_LISTSTORE);
+	int numParams = aux_LuaCall_SetUp_Obj(methodName, params);
+	if (numParams == -1) {
+		return aux_LuaValueList_Create(0, LUACALL_FUNCNOTFOUND);
+	}
+	void* list = aux_LuaCall_ReturnList(main_L, numParams, protectedMode);
+	return list;
+}
+
 void RegisterLuaValueListFunctions() {
 	engine->AddManagedObjectReader(LUAVALUELIST_TYPENAME, &gLuaValueListReader);
 
@@ -756,6 +891,14 @@ void RegisterLuaValueListFunctions() {
 	engine->RegisterScriptFunction("LuaValue::get_AsString", (void*)LuaValueList_ToString);
 	engine->RegisterScriptFunction("LuaValue::get_AsBool", (void*)LuaValueList_ToBool);
 	engine->RegisterScriptFunction("LuaValue::get_Type", (void*)LuaValue_get_Type);
+	engine->RegisterScriptFunction("LuaValue::get_ValueLength", (void*)LuaValue_get_LuaLength);
+	engine->RegisterScriptFunction("LuaValue::geti_AsArray", (void*)LuaValue_geti_LuaIndex);
+	engine->RegisterScriptFunction("LuaValue::seti_AsArray", (void*)LuaValue_seti_LuaIndex);
+	engine->RegisterScriptFunction("LuaValue::GetField^1", (void*)LuaValue_GetLuaField);
+	engine->RegisterScriptFunction("LuaValue::SetField^2", (void*)LuaValue_GetLuaField);
+	engine->RegisterScriptFunction("LuaValue::Call^2", (void*)LuaValue_Call);
+	engine->RegisterScriptFunction("LuaValue::CallField^3", (void*)LuaValue_CallField);
+	engine->RegisterScriptFunction("LuaValue::CallMethod^3", (void*)LuaValue_CallMethod);
 
 	engine->RegisterScriptFunction("LuaValueList::get_Length", (void*)LuaValueList_get_Length);
 	engine->RegisterScriptFunction("LuaValueList::set_Length", (void*)LuaValueList_set_Length);

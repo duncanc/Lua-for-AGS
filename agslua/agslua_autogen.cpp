@@ -26,11 +26,11 @@ static FLOAT_RETURN_TYPE luags_checkscriptfloat(lua_State *L, int idx) {
 }
 
 static void* ImmortalLuaMethod(void* obj, const char* name, void* params, int protectedMode) {
-	int numParams = aux_LuaCall_SetUp(obj, name, params);
+	int numParams = aux_LuaCall_SetUp(main_L, obj, name, params);
 	if (numParams == -1) {
 		return NULL; // LUACALL_FUNCNOTFOUND;
 	}
-	return aux_LuaCall_ReturnList(numParams, protectedMode);
+	return aux_LuaCall_ReturnList(main_L, numParams, protectedMode);
 }
 
 int AGS_Ephemeral__gc(lua_State *L) {
@@ -9249,7 +9249,7 @@ static void* HotspotLuaMethod(void* obj, const char* name, void* params, int pro
 	if (numParams == -1) {
 		return aux_LuaValueList_Create(0, LUACALL_FUNCNOTFOUND);
 	}
-	return aux_LuaCall_ReturnList(numParams, protectedMode);
+	return aux_LuaCall_ReturnList(main_L, numParams, protectedMode);
 }
 AGS_Region* Lua_ToRegion(void* ptr) {
 	if (!ptr) {
@@ -9371,7 +9371,7 @@ static void* RegionLuaMethod(void* obj, const char* name, void* params, int prot
 	if (numParams == -1) {
 		return aux_LuaValueList_Create(0, LUACALL_FUNCNOTFOUND);
 	}
-	return aux_LuaCall_ReturnList(numParams, protectedMode);
+	return aux_LuaCall_ReturnList(main_L, numParams, protectedMode);
 }
 AGS_Dialog* Lua_ToDialog(void* ptr) {
 	if (!ptr) {
@@ -9825,7 +9825,7 @@ static void* ObjectLuaMethod(void* obj, const char* name, void* params, int prot
 	if (numParams == -1) {
 		return aux_LuaValueList_Create(0, LUACALL_FUNCNOTFOUND);
 	}
-	return aux_LuaCall_ReturnList(numParams, protectedMode);
+	return aux_LuaCall_ReturnList(main_L, numParams, protectedMode);
 }
 AGS_Character* Lua_ToCharacter(void* ptr) {
 	if (!ptr) {
